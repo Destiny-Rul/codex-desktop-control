@@ -554,12 +554,12 @@ async function discoverOwner(id){const response=await sendRequest('thread-owner-
 async function main(){
   socket=net.createConnection(input.pipe);socket.on('data',handleData);await new Promise((resolve,reject)=>{socket.once('connect',resolve);socket.once('error',reject);});
   const init=await sendRequest('initialize',{clientType:'farfield'},{sourceClientId:'initializing-client'});clientId=init?.result?.clientId;if(!clientId)throw new Error('IPC initialize did not return clientId');
-  let ownerClientId;try{ownerClientId=await discoverOwner(input.threadId)}catch{}if(!ownerClientId)ownerClientId=await waitForOwner(input.threadId);let result=null;
+  let ownerClientId;try{ownerClientId=await discoverOwner(input.threadId)}catch(error){if(String(error).includes('no-client-found'))throw error;if(!String(error).includes('no-handler-for-request'))throw error;}if(!ownerClientId)ownerClientId=await waitForOwner(input.threadId);let result=null;
   if((input.operation==='send' || input.operation==='steer' || input.operation==='settings') && input.threadSettings && Object.keys(input.threadSettings).length>0){
     await sendRequest('thread-follower-update-thread-settings',{conversationId:input.threadId,threadSettings:input.threadSettings},{targetClientId:ownerClientId});
   }
   if(input.operation==='send'){
-    const response=await sendRequest('thread-follower-start-turn',input.params,{targetClientId:ownerClientId,version:2});result=response.result??null;
+    const response=await sendRequest('thread-follower-start-turn',input.params,{targetClientId:ownerClientId,version:input.startTurnVersion??1});result=response.result??null;
   } else if(input.operation==='steer'){
     const response=await sendRequest('thread-follower-steer-turn',input.params,{targetClientId:ownerClientId});result=response.result??null;
   } else if(input.operation==='interrupt'){
@@ -850,7 +850,14 @@ def submit_turn(ctx: Context, *, thread_id: str, prompt: str, model: str | None,
     try:
         operation = "steer" if steering else "send"
         params = build_steer_request(thread_id, prompt, target_turn, thread_cwd(ctx, thread_id)) if steering else build_turn_request(thread_id, prompt, model, effort, False)
-        result = run_ipc(ctx, {"operation": operation, "pipe": PIPE_PATH, "threadId": thread_id, "threadSettings": settings, "params": params})
+        result = run_ipc(ctx, {
+            "operation": operation,
+            "pipe": PIPE_PATH,
+            "threadId": thread_id,
+            "threadSettings": settings,
+            "params": params,
+            "startTurnVersion": 2,
+        })
     except Exception as exc:
         job.update({"submission_status": "uncertain", "submission_error": f"{type(exc).__name__}: {exc}"})
         save_job(ctx, job)

@@ -10,9 +10,9 @@ For a send with model or effort overrides, issue operations in this exact order:
 
 1. `thread-follower-update-thread-settings` with `conversationId` and `threadSettings`.
 2. Require a successful response.
-3. For a new turn, call `thread-follower-start-turn` at the live protocol version (currently `2`) with `conversationId` and a `turnStart` object containing `request` and `context`; require the acknowledged `turn.id`.
+3. For a new turn, call `thread-follower-start-turn` **version 2** with `conversationId` and `turnStart: {request, context}`. The request contains `threadId`, input, model and effort; the context contains the attachment arrays and `inheritThreadSettings: true`. Require the acknowledged `turn.id`.
 4. For guidance on an active turn, call `thread-follower-steer-turn` with the exact conversation and text input; require its `turnId` to equal the parent job's active turn.
-5. If either acknowledgement is absent or mismatched, persist the outcome as uncertain and do not retry automatically. An explicit IPC `no-client-found` response is different: it is a negative acknowledgement that the targeted client did not exist. The controller may reconnect once, rediscover a settled owner, and resend the same operation; any second `no-client-found`, timeout, malformed response, or other error remains fail-closed.
+5. If either acknowledgement is absent or mismatched, persist the outcome as uncertain and do not retry automatically. An explicit IPC `no-client-found` response from a targeted request is different: it is a negative acknowledgement that the targeted client did not exist. The controller may reconnect once, rediscover the owner, and resend the same operation. A `no-client-found` response from `thread-owner-discovery` means there is no current owner and must fail closed; it must not fall back to follower broadcasts. Any second targeted `no-client-found`, timeout, malformed response, or other error remains fail-closed.
 
 Use `thread-follower-interrupt-turn` version 4 with `expectedTurnId` for interrupt. Never infer a replacement turn after an interrupt mismatch.
 

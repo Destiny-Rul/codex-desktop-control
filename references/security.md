@@ -1,5 +1,6 @@
 # Security and isolation
 
+- Discover an owner through `thread-owner-discovery` before a live operation. A `no-client-found` response means no current owner and must fail closed; only an explicit `no-handler-for-request` from an older Desktop may use the settled follower-broadcast fallback.
 - Resolve Skill data only from an explicit absolute Hermes home and validated profile name. Keep it below `skill-data/codex-desktop-control/profiles/<profile>`.
 - Resolve Desktop state only from explicit `--desktop-codex-home`; never derive it from the user home.
 - Invoke Node only by its absolute private path validated against `dependencies.lock.json` and the bootstrap install manifest.
