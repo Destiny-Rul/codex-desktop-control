@@ -1,0 +1,55 @@
+{
+  "format_version": 1,
+  "skill_version": "0.3.4",
+  "platform": "windows-x86_64",
+  "python": {
+    "minimum": "3.11.0",
+    "external_packages": []
+  },
+  "node": {
+    "version": "22.17.0",
+    "archive": "node-v22.17.0-win-x64.zip",
+    "url": "https://nodejs.org/dist/v22.17.0/node-v22.17.0-win-x64.zip",
+    "archive_sha256": "721ab118a3aac8584348b132767eadf51379e0616f0db802cc1e66d7f0d98f85",
+    "executable_relative_path": "node/node.exe",
+    "executable_sha256": "39d45b5933f339d3ebdebd76474893dab5d7da1038920f65cf5bbcf0f20f3636"
+  },
+
+  "desktop_compatibility": {
+    "desktop_executable": "ChatGPT.exe",
+    "desktop_protocol_payload": "app/resources/app.asar",
+    "desktop_install_root": "C:\\Program Files\\WindowsApps",
+    "desktop_publisher_id": "2p2nqsd0c76g0",
+    "protocol_contract": {
+      "required_anchors": [
+        "codex-ipc",
+        "readUInt32LE",
+        "writeUInt32LE",
+        "clientType",
+        "expectedTurnId",
+        "thread-stream-following-changed",
+        "thread-follower-start-turn",
+        "thread-follower-steer-turn",
+        "thread-follower-interrupt-turn",
+        "thread-follower-update-thread-settings"
+      ],
+      "method_versions": {
+        "thread-stream-following-changed": 1,
+        "thread-follower-start-turn": 2,
+        "thread-follower-steer-turn": 1,
+        "thread-follower-interrupt-turn": 4,
+        "thread-follower-update-thread-settings": 1
+      }
+    },
+    "reference_build": {
+      "version": "26.803.10989.0",
+      "desktop_executable_sha256": "74563edbd2dd1cb427803ee071a99acc61baaa408a77d06357af9658f077578a",
+      "desktop_protocol_payload_sha256": "39c855f6a0db1cad89dc629edf2f9473b78a25b64fcb1445ece1022af6527755",
+      "protocol_fingerprint_sha256": "331151bda221c35bab5dee39896fea27f84fbb3a8c8d2282a2c7537c82136079"
+    },
+    "state_database": "state_5.sqlite",
+    "required_thread_columns": ["id", "rollout_path", "title", "cwd", "archived", "updated_at_ms", "model", "reasoning_effort"],
+    "migration_count": 46,
+    "migration_sha256": "4e616da5afebddb7eb3511b56b3a9de9e364b46903dc12f4efafd816af4ae6e8"
+  }
+}
