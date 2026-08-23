@@ -6,4 +6,4 @@
 
 ## 状态
 
-v0.3.5 增加 owner discovery 的 fail-closed 检查、将其纳入协议锁，并为 Codex Desktop v2 start-turn 请求加入离线回归测试。此版本尚未针对当前 Desktop build 写入新的认证回执；在认证完成前写入能力必须保持禁用。
+v0.3.5 增加 owner discovery 的 fail-closed 检查、将其纳入协议锁，并为 Codex Desktop v2 start-turn 请求加入离线回归测试。离线兼容检查通过；当前指定测试会话未被任何 Desktop client 持有，`thread-owner-discovery` 返回 `no-client-found`，因此在线认证被安全阻止。打开该专用测试会话后，先运行 online doctor，再执行 `certify`。
