@@ -38,7 +38,14 @@ def main() -> None:
     assert "if(String(error).includes('no-client-found'))throw error;" in source
     assert "if(!String(error).includes('no-handler-for-request'))throw error;" in source
 
-    print("PASS: start-turn v2 and owner discovery fail-closed policy")
+    exact = {"status": "completed", "final_response": "CODEX_DESKTOP_CERT_STEER_OK"}
+    padded = {"status": "completed", "final_response": "CODEX_DESKTOP_CERT_STEER_OK\n\n"}
+    extra = {"status": "completed", "final_response": "prefix CODEX_DESKTOP_CERT_STEER_OK"}
+    assert controller._certification_result(exact, status="completed", response="CODEX_DESKTOP_CERT_STEER_OK")["ok"]
+    assert controller._certification_result(padded, status="completed", response="CODEX_DESKTOP_CERT_STEER_OK")["ok"]
+    assert not controller._certification_result(extra, status="completed", response="CODEX_DESKTOP_CERT_STEER_OK")["ok"]
+
+    print("PASS: IPC v2, owner fail-closed, and certification response normalization")
 
 
 if __name__ == "__main__":

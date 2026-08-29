@@ -1142,7 +1142,8 @@ def abort_active_certification_turn(ctx: Context, thread_id: str) -> dict[str, A
 def _certification_result(summary: dict[str, Any], *, status: str, response: str | None = None) -> dict[str, Any]:
     ok = summary.get("status") == status
     if response is not None:
-        ok = ok and summary.get("final_response") == response
+        final_response = summary.get("final_response")
+        ok = ok and isinstance(final_response, str) and final_response.strip() == response
     return {
         "ok": ok,
         "job_id": summary.get("job_id"),
@@ -1218,7 +1219,8 @@ def _certify_build_e2e(
     send_check["status_readback_ok"] = (
         send_status.get("status") == "completed"
         and send_status.get("turn_id") == send_wait.get("turn_id")
-        and send_status.get("final_response") == "CODEX_DESKTOP_CERT_SEND_OK"
+        and isinstance(send_status.get("final_response"), str)
+        and send_status["final_response"].strip() == "CODEX_DESKTOP_CERT_SEND_OK"
     )
     send_check["ok"] = bool(send_check["ok"] and send_check["status_readback_ok"])
     if not send_check["ok"]:
