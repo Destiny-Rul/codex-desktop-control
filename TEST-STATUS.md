@@ -6,4 +6,4 @@
 
 ## 状态
 
-v0.3.6 保留 owner discovery 的 fail-closed 检查和 Codex Desktop v2 start-turn 契约，并允许认证标记响应带有首尾空白；非空白额外文本仍会失败。当前 build 尚待重新认证。
+v0.3.6 保留 owner discovery 的 fail-closed 检查和 Codex Desktop v2 start-turn 契约，并允许认证标记响应带有首尾空白；非空白额外文本仍会失败。已在当前 build 完成 probe、send/wait/status、临时设置往返与恢复、同 turn steer、精确 interrupt 和最终 probe，research profile 认证通过。
