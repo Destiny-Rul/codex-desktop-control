@@ -20,8 +20,9 @@ Control an already-running Codex Desktop task through its structured Windows IPC
 
 ## Collaboration workflow
 
-- Hermes handles fast tasks directly. For necessary complex work, dispatch to the Codex Desktop thread designated by the user; never select a thread on the user's behalf.
-- Write Codex prompts primarily in English, request use of FastCtx once, and leave model and reasoning settings under user control. Do not set or change them unless the user explicitly requests it.
+- Hermes handles fast tasks directly. For necessary complex work, prefer Codex Desktop and minimize use of Hermes built-in subagents.
+- After obtaining the user's consent, Hermes may control one or multiple Codex Desktop threads that the user explicitly designates. Keep every operation scoped to those threads; never select a thread or expand the controlled set on the user's behalf.
+- Write Codex task prompts primarily in English, request use of FastCtx once, and leave model and reasoning settings under user control. Do not set or change them unless the user explicitly requests it.
 - Immediately after dispatch, start exactly one task-appropriate controller `wait` as a non-blocking background job. Hermes may continue working or communicating in parallel and may inspect progress or steer the active turn when needed, but must not start a duplicate waiter.
 - Treat a wait timeout as a review gate, not as task failure: inspect current state, decide whether to keep waiting or steer, and communicate material progress.
 - When Codex completes, Hermes independently reviews and accepts the returned artifacts. If rework is required, repeat the dispatch, single background wait, and independent acceptance cycle.
@@ -37,6 +38,7 @@ Control an already-running Codex Desktop task through its structured Windows IPC
 - A controller `wait` observes the Codex Desktop turn only. If that turn launches a remote or detached child process, require its PID, progress path and completion markers in the returned task receipt. For an expected runtime above five minutes, instruct Codex to establish a single read-only remote monitor with a first snapshot by five minutes and snapshots every ten minutes thereafter (PID, progress, rate, CPU/GPU, disk, errors, terminal marker). The primary agent must also start an independent read-only verifier plus a five-minute delivery alarm; a completed/timed-out Codex turn is never proof that its remote child completed or failed, and Codex monitoring never replaces the primary agent's user-facing progress report.
 - After a Desktop build or database migration changes, permit only structural checks and existing-job reads until `certify` succeeds on an explicitly designated test thread.
 - Treat `certify` as a state-changing maintenance operation. It sends test turns, changes and restores model settings, steers one turn, and interrupts one turn on that exact test thread. Never choose a thread automatically.
+- Test-thread IDs, models, and reasoning settings are local to each user's Codex Desktop installation and Hermes profile. Never ship, infer, or reuse them as portable defaults; require the user to designate the thread and preserve that thread's user-controlled settings.
 - **Upgrade recovery:** run `doctor.py --offline`, then the online doctor after a Desktop build/schema or migration warning. If it reports `structurally-compatible` with stale certification, use the already user-designated working/test thread only when the user explicitly authorizes automatic continuation or names that thread; run `certify --thread ID`, then rerun online doctor and `probe` before the next `send`. Do not bypass certification, retry a blocked send, or substitute foreground UI control.
 - Keep generated jobs and temporary files below the selected profile's Skill data directory.
 - Do not fall back to global `PATH`, `~/.codex`, Hermes configuration, PowerShell profiles, or ambient credentials.

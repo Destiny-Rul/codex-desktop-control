@@ -13,6 +13,10 @@ reasoning effort; certification verified a temporary `medium` round trip and
 restored the original `low` setting. Online doctor must read the profile-local
 receipt back as certified before write capabilities are used.
 
+The thread ID, model, and reasoning effort above describe this certification
+environment only. They are not portable defaults: each user and profile must
+designate its own test thread and preserve that thread's chosen settings.
+
 Certification receipts are machine-, profile-, skill-version-, Desktop-build-,
 protocol-, and schema-specific. They are runtime data and are never published
 or copied between devices.
