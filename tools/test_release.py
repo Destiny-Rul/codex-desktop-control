@@ -25,6 +25,7 @@ def main() -> None:
             assert archive.testzip() is None
             assert all(info.date_time == ZIP_TIMESTAMP for info in archive.infolist())
             assert all(info.filename.startswith(PREFIX) for info in archive.infolist())
+            assert all(b"\r\n" not in archive.read(info) for info in archive.infolist())
 
         try:
             with patch.object(Path, "is_symlink", return_value=True):

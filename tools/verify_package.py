@@ -24,13 +24,13 @@ def assert_regular_source(path: Path) -> None:
         raise RuntimeError(f"release source is not a regular file: {path}")
 
 
-def sha256(path: Path) -> str:
+def canonical_bytes(path: Path) -> bytes:
     assert_regular_source(path)
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(canonical_bytes(path)).hexdigest()
 
 
 def package_sources() -> dict[PurePosixPath, Path]:

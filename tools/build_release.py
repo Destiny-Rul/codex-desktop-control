@@ -7,7 +7,7 @@ import re
 import zipfile
 from pathlib import Path, PurePosixPath
 
-from verify_package import MANIFEST, PREFIX, REPO_ROOT, SKILL_ROOT, assert_regular_source, package_sources, verify
+from verify_package import MANIFEST, PREFIX, REPO_ROOT, SKILL_ROOT, assert_regular_source, canonical_bytes, package_sources, verify
 
 
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
@@ -20,7 +20,7 @@ def write_deterministic(archive: zipfile.ZipFile, name: str, source: Path) -> No
     info.create_system = 3
     info.external_attr = 0o100644 << 16
     info.flag_bits |= 0x800
-    archive.writestr(info, source.read_bytes(), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+    archive.writestr(info, canonical_bytes(source), compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
 
 def sha256(path: Path) -> str:
