@@ -1,6 +1,6 @@
 {
   "format_version": 1,
-  "skill_version": "0.3.8",
+  "skill_version": "0.3.9",
   "platform": "windows-x86_64",
   "python": {
     "minimum": "3.11.0",
