@@ -35,8 +35,6 @@ def main() -> None:
     source = SOURCE.read_text(encoding="utf-8")
     assert '"startTurnVersion": 2' in source
     assert "version:input.startTurnVersion??1" in source
-    assert "if(String(error).includes('no-client-found'))throw error;" in source
-    assert "if(!String(error).includes('no-handler-for-request'))throw error;" in source
 
     exact = {"status": "completed", "final_response": "CODEX_DESKTOP_CERT_STEER_OK"}
     padded = {"status": "completed", "final_response": "CODEX_DESKTOP_CERT_STEER_OK\n\n"}

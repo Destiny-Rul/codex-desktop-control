@@ -1,7 +1,7 @@
 ---
 name: codex-desktop-control
 description: Safely control existing Codex Desktop tasks on Windows.
-version: 0.3.6
+version: 0.3.8
 author: Destiny-Rul
 license: MIT
 platforms:
@@ -17,6 +17,15 @@ metadata:
 # Codex Desktop Control
 
 Control an already-running Codex Desktop task through its structured Windows IPC. Use only the bundled scripts and explicit absolute configuration; never install this source package into Codex or copy credentials into the Skill.
+
+## Collaboration workflow
+
+- Hermes handles fast tasks directly. For necessary complex work, dispatch to the Codex Desktop thread designated by the user; never select a thread on the user's behalf.
+- Write Codex prompts primarily in English, request use of FastCtx once, and leave model and reasoning settings under user control. Do not set or change them unless the user explicitly requests it.
+- Immediately after dispatch, start exactly one task-appropriate controller `wait` as a non-blocking background job. Hermes may continue working or communicating in parallel and may inspect progress or steer the active turn when needed, but must not start a duplicate waiter.
+- Treat a wait timeout as a review gate, not as task failure: inspect current state, decide whether to keep waiting or steer, and communicate material progress.
+- When Codex completes, Hermes independently reviews and accepts the returned artifacts. If rework is required, repeat the dispatch, single background wait, and independent acceptance cycle.
+- When a user decision is unclear and would materially affect the result, ask a concise selectable question before dispatching that choice.
 
 ## Safety contract
 

@@ -533,12 +533,13 @@ const ownerUpdatedAt = new Map();
 const OWNER_SETTLE_MS = 250;
 const pending = new Map();
 let socket, buffer = Buffer.alloc(0), clientId = null;
+class IpcResponseError extends Error { constructor(method,error,targeted){super(`IPC ${method} failed: ${JSON.stringify(error)}`);this.name='IpcResponseError';this.method=method;this.ipcError=error;this.targeted=targeted;} }
 function writeFrame(frame) { const body = Buffer.from(JSON.stringify(frame), 'utf8'); const header = Buffer.alloc(4); header.writeUInt32LE(body.length, 0); socket.write(Buffer.concat([header, body])); }
 function sendRequest(method, params, options = {}) {
   const requestId = randomUUID();
   const frame = {type:'request', requestId, method, params, sourceClientId:options.sourceClientId || clientId || 'initializing-client', version:options.version ?? 1};
   if (options.targetClientId) frame.targetClientId = options.targetClientId;
-  const promise = new Promise((resolve,reject) => { const timer=setTimeout(()=>{pending.delete(requestId);reject(new Error(`IPC request timed out: ${method}`));},options.timeoutMs||20000);pending.set(requestId,{resolve,reject,timer,method}); });
+  const promise = new Promise((resolve,reject) => { const timer=setTimeout(()=>{pending.delete(requestId);reject(new Error(`IPC request timed out: ${method}`));},options.timeoutMs||20000);pending.set(requestId,{resolve,reject,timer,method,targeted:Boolean(options.targetClientId)}); });
   writeFrame(frame); return promise;
 }
 function handleFrame(frame) {
@@ -546,7 +547,7 @@ function handleFrame(frame) {
   if (frame.type==='request') { writeFrame({type:'response',requestId:frame.requestId,resultType:'error',error:'no-handler-for-request'}); return; }
   if (frame.type==='broadcast' && frame.method==='thread-stream-following-changed' && frame.params?.following===true && frame.sourceClientId) { const id=frame.params.conversationId||frame.params.threadId; if(id) { owners.set(id,frame.sourceClientId); ownerUpdatedAt.set(id,Date.now()); } }
   if (frame.type!=='response') return; const item=pending.get(frame.requestId); if(!item) return; pending.delete(frame.requestId); clearTimeout(item.timer);
-  if(frame.resultType==='error') item.reject(new Error(`IPC ${item.method} failed: ${JSON.stringify(frame.error)}`)); else item.resolve(frame);
+  if(frame.resultType==='error') item.reject(new IpcResponseError(item.method,frame.error,item.targeted)); else item.resolve(frame);
 }
 function handleData(chunk) { buffer=Buffer.concat([buffer,chunk]); while(buffer.length>=4){const size=buffer.readUInt32LE(0);if(size>32*1024*1024)throw new Error(`IPC frame too large: ${size}`);if(buffer.length<size+4)return;const frame=JSON.parse(buffer.subarray(4,size+4).toString('utf8'));buffer=buffer.subarray(size+4);handleFrame(frame);} }
 function waitForOwner(id,timeoutMs=7000,ownerSettleMs=OWNER_SETTLE_MS){return new Promise((resolve,reject)=>{const deadline=Date.now()+timeoutMs;const timer=setInterval(()=>{const owner=owners.get(id);if(owner && Date.now()-ownerUpdatedAt.get(id)>=ownerSettleMs){clearInterval(timer);resolve(owner);}else if(Date.now()>=deadline){clearInterval(timer);reject(new Error(`No visible Codex Desktop owner announced thread ${id}`));}},20);});}
@@ -554,7 +555,7 @@ async function discoverOwner(id){const response=await sendRequest('thread-owner-
 async function main(){
   socket=net.createConnection(input.pipe);socket.on('data',handleData);await new Promise((resolve,reject)=>{socket.once('connect',resolve);socket.once('error',reject);});
   const init=await sendRequest('initialize',{clientType:'farfield'},{sourceClientId:'initializing-client'});clientId=init?.result?.clientId;if(!clientId)throw new Error('IPC initialize did not return clientId');
-  let ownerClientId;try{ownerClientId=await discoverOwner(input.threadId)}catch(error){if(String(error).includes('no-client-found'))throw error;if(!String(error).includes('no-handler-for-request'))throw error;}if(!ownerClientId)ownerClientId=await waitForOwner(input.threadId);let result=null;
+  let ownerClientId;try{ownerClientId=await discoverOwner(input.threadId)}catch(error){if(!(error instanceof IpcResponseError) || error.ipcError!=='no-handler-for-request')throw error;}if(!ownerClientId)ownerClientId=await waitForOwner(input.threadId);let result=null;
   if((input.operation==='send' || input.operation==='steer' || input.operation==='settings') && input.threadSettings && Object.keys(input.threadSettings).length>0){
     await sendRequest('thread-follower-update-thread-settings',{conversationId:input.threadId,threadSettings:input.threadSettings},{targetClientId:ownerClientId});
   }
@@ -567,8 +568,18 @@ async function main(){
   }
   process.stdout.write(JSON.stringify({connected:true,threadId:input.threadId,clientId,ownerClientId,result}));socket.destroy();
 }
-main().catch(error=>{if(socket)socket.destroy();process.stderr.write(error?.stack||String(error));process.exitCode=1;});
+main().catch(error=>{if(socket)socket.destroy();if(error instanceof IpcResponseError && error.targeted===true && error.ipcError==='no-client-found'){process.stderr.write(JSON.stringify({schema:1,type:'ipc-rejection',reason:'no-client-found'}));}else{process.stderr.write(error?.stack||String(error));}process.exitCode=1;});
 """
+
+
+def _is_explicit_no_client_rejection(stderr: str, stdout: str) -> bool:
+    if stdout.strip():
+        return False
+    try:
+        error = json.loads(stderr)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return error == {"schema": 1, "type": "ipc-rejection", "reason": "no-client-found"}
 
 
 def run_ipc(ctx: Context, payload: dict[str, Any], timeout: float = 55, retry_owner_missing: bool = True) -> dict[str, Any]:
@@ -594,7 +605,7 @@ def run_ipc(ctx: Context, payload: dict[str, Any], timeout: float = 55, retry_ow
                 raise RuntimeError("Codex Desktop IPC bridge returned a non-object result")
             return result
         message = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
-        if attempt == 0 and 'no-client-found' in message:
+        if attempt == 0 and _is_explicit_no_client_rejection(completed.stderr, completed.stdout):
             continue
         raise RuntimeError(f"Codex Desktop IPC bridge failed: {message}")
     raise AssertionError("unreachable")
