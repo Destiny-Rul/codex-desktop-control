@@ -1,7 +1,7 @@
 ---
 name: codex-desktop-control
 description: Safely control existing Codex Desktop tasks on Windows.
-version: 0.3.9
+version: 0.3.10
 author: Destiny-Rul
 license: MIT
 platforms:
@@ -21,9 +21,10 @@ Control an already-running Codex Desktop task through its structured Windows IPC
 ## Collaboration workflow
 
 - Hermes handles fast tasks directly. For necessary complex work, prefer Codex Desktop and minimize use of Hermes built-in subagents.
+- Codex Desktop may decide autonomously whether to use its own subagents while executing a task; Hermes does not need to authorize each Codex-internal subagent.
 - After obtaining the user's consent, Hermes may control one or multiple Codex Desktop threads that the user explicitly designates. Keep every operation scoped to those threads; never select a thread or expand the controlled set on the user's behalf.
 - Write Codex task prompts primarily in English, request use of FastCtx once, and leave model and reasoning settings under user control. Do not set or change them unless the user explicitly requests it.
-- Immediately after dispatch, start exactly one task-appropriate controller `wait` as a non-blocking background job. Hermes may continue working or communicating in parallel and may inspect progress or steer the active turn when needed, but must not start a duplicate waiter.
+- Immediately after dispatch, start exactly one task-appropriate controller `wait` as a non-blocking background job. Hermes may continue working or communicating in parallel and may inspect progress or steer the active turn when needed, but must not call `process(wait)` to block on that waiter or start a duplicate waiter.
 - Treat a wait timeout as a review gate, not as task failure: inspect current state, decide whether to keep waiting or steer, and communicate material progress.
 - When Codex completes, Hermes independently reviews and accepts the returned artifacts. If rework is required, repeat the dispatch, single background wait, and independent acceptance cycle.
 - When a user decision is unclear and would materially affect the result, ask a concise selectable question before dispatching that choice.
@@ -34,11 +35,11 @@ Control an already-running Codex Desktop task through its structured Windows IPC
 - Require Windows x86-64, an absolute `--hermes-home`, a simple `--profile`, and an explicit absolute `--desktop-codex-home` (the Codex user-state directory containing `state_5.sqlite`, normally `%USERPROFILE%\\.codex`) on every invocation.
 - Run `scripts/doctor.py --offline` after bootstrap and before controller use. Run online doctor checks before the first live operation after a Desktop upgrade.
 - Treat `send`, `steer`, and `interrupt` as state-changing operations. Never retry an uncertain send automatically. The controller may make exactly one fresh-connection recovery only after an explicit IPC `no-client-found` rejection: that response proves the addressed Desktop client no longer existed and therefore could not have created a turn.
-- After every confirmed `send` for a nontrivial execution task, immediately start exactly one tracked background waiter: run `desktop_controller.py ... wait --job JOB --timeout SECONDS` through `terminal(background=True, notify_on_complete=True)`. The controller takes only explicit absolute arguments and does not need a shell working directory: omit the `terminal` `workdir` field for this waiter. This prevents malformed or copy/paste-contaminated workdir values (including `\r`) from blocking its launch. When that waiter exits, read the job once with `status`, independently verify any reported local/remote artifacts, and synchronize the newly created non-rebuildable material before dispatching another task. Do not rely on the user to ask for status, and do not launch duplicate waiters for the same job.
+- After every confirmed `send` for a nontrivial execution task, immediately start exactly one tracked background waiter: run `desktop_controller.py ... wait --job JOB --timeout SECONDS` through `terminal(background=True, notify_on_complete=True)`. The controller takes only explicit absolute arguments and does not need a shell working directory: omit the `terminal` `workdir` field for this waiter. This prevents malformed or copy/paste-contaminated workdir values (including `\r`) from blocking its launch. If the observer exits or times out, do not replace it with a duplicate waiter; inspect the job once with `status` at a meaningful review gate. When the job reaches terminal state, independently verify any reported local/remote artifacts and synchronize newly created non-rebuildable material before dispatching another task. Do not rely on the user to ask for status, and never use `process(wait)` to block the conversation on the background waiter.
 - A controller `wait` observes the Codex Desktop turn only. If that turn launches a remote or detached child process, require its PID, progress path and completion markers in the returned task receipt. For an expected runtime above five minutes, instruct Codex to establish a single read-only remote monitor with a first snapshot by five minutes and snapshots every ten minutes thereafter (PID, progress, rate, CPU/GPU, disk, errors, terminal marker). The primary agent must also start an independent read-only verifier plus a five-minute delivery alarm; a completed/timed-out Codex turn is never proof that its remote child completed or failed, and Codex monitoring never replaces the primary agent's user-facing progress report.
 - After a Desktop build or database migration changes, permit only structural checks and existing-job reads until `certify` succeeds on an explicitly designated test thread.
 - Treat `certify` as a state-changing maintenance operation. It sends test turns, changes and restores model settings, steers one turn, and interrupts one turn on that exact test thread. Never choose a thread automatically.
-- Test-thread IDs, models, and reasoning settings are local to each user's Codex Desktop installation and Hermes profile. Never ship, infer, or reuse them as portable defaults; require the user to designate the thread and preserve that thread's user-controlled settings.
+- Certification defaults portably to model `gpt-5.6-sol` and reasoning effort `low`; an explicit user choice may override either with `certify --model MODEL --effort EFFORT`. Only the test-thread ID is installation/profile-local and must always be user-designated. Confirm that thread exists, is unarchived, and is idle before applying certification settings. If it is missing or not open, ask a selectable user question and never select a replacement automatically.
 - **Upgrade recovery:** run `doctor.py --offline`, then the online doctor after a Desktop build/schema or migration warning. If it reports `structurally-compatible` with stale certification, use the already user-designated working/test thread only when the user explicitly authorizes automatic continuation or names that thread; run `certify --thread ID`, then rerun online doctor and `probe` before the next `send`. Do not bypass certification, retry a blocked send, or substitute foreground UI control.
 - Keep generated jobs and temporary files below the selected profile's Skill data directory.
 - Do not fall back to global `PATH`, `~/.codex`, Hermes configuration, PowerShell profiles, or ambient credentials.
@@ -61,7 +62,7 @@ Use these subcommands:
 - `wait --job JOB --timeout SECONDS`: perform bounded Windows rollout monitoring until terminal state.
 - `steer --job JOB --prompt TEXT [--model MODEL --effort EFFORT]`: steer the exact active turn.
 - `interrupt --job JOB`: interrupt the exact active turn.
-- `certify --thread ID [--timeout SECONDS]`: run the complete compatibility test on one explicitly designated test thread and write a build-bound local receipt only after every check passes.
+- `certify --thread ID [--model MODEL] [--effort EFFORT] [--timeout SECONDS]`: apply the portable `gpt-5.6-sol`/`low` defaults unless explicitly overridden, then run the complete compatibility test on the user-designated thread and write a build-bound local receipt only after every check passes.
 
 ## References
 

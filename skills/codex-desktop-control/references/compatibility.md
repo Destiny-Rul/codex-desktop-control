@@ -12,7 +12,7 @@ The full `ChatGPT.exe` and `app.asar` hashes remain build identity and audit evi
 
 ## Automatic certification
 
-Run `certify --thread ID` only on a thread explicitly reserved for compatibility testing. It performs owner discovery, send/wait/status, a model-and-effort settings round trip, same-turn steer, exact-turn interrupt, final owner discovery, and final settings restoration. Any mismatch removes the receipt. Failure cleanup attempts to interrupt only that test thread's exact active turn and restore its original settings.
+Run `certify --thread ID` only on a thread explicitly reserved for compatibility testing. Certification first applies and verifies the portable `gpt-5.6-sol`/`low` defaults, or explicit `--model` and `--effort` overrides; those applied settings become the certification originals. It then performs owner discovery, send/wait/status, a model-and-effort settings round trip, same-turn steer, exact-turn interrupt, final owner discovery, and final settings restoration. Any mismatch removes the receipt. Failure cleanup attempts to interrupt only that test thread's exact active turn and restore the verified certification originals.
 
 The reference build is Codex Desktop 26.803.10989.0. Its hashes and protocol fingerprint are retained in `dependencies.lock.json` as audit evidence, not as a permanent version allowlist.
 

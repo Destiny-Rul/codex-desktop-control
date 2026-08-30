@@ -135,7 +135,7 @@ status --job JOB [--reconcile-turn TURN]
 wait --job JOB --timeout SECONDS
 steer --job JOB --prompt TEXT [--model MODEL --effort EFFORT]
 interrupt --job JOB
-certify --thread ID [--timeout SECONDS]
+certify --thread ID [--model MODEL] [--effort EFFORT] [--timeout SECONDS]
 ```
 
 Read [`skills/codex-desktop-control/SKILL.md`](skills/codex-desktop-control/SKILL.md)

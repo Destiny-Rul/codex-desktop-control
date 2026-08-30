@@ -1106,7 +1106,7 @@ def thread_settings_info(ctx: Context, thread_id: str) -> dict[str, Any]:
     return {"model": row[0], "effort": row[1]}
 
 
-def restore_thread_settings(ctx: Context, thread_id: str, model: str, effort: str) -> None:
+def set_thread_settings(ctx: Context, thread_id: str, model: str, effort: str) -> None:
     result = run_ipc(
         ctx,
         {
@@ -1117,10 +1117,14 @@ def restore_thread_settings(ctx: Context, thread_id: str, model: str, effort: st
         },
     )
     if result.get("connected") is not True:
-        raise RuntimeError("Could not reconnect while restoring certification thread settings")
-    restored = thread_settings_info(ctx, thread_id)
-    if restored.get("model") != model or restored.get("effort") != effort:
-        raise RuntimeError("Certification thread settings were not restored")
+        raise RuntimeError("Could not apply certification thread settings")
+    applied = thread_settings_info(ctx, thread_id)
+    if applied.get("model") != model or applied.get("effort") != effort:
+        raise RuntimeError("Certification thread settings write did not pass readback")
+
+
+def restore_thread_settings(ctx: Context, thread_id: str, model: str, effort: str) -> None:
+    set_thread_settings(ctx, thread_id, model, effort)
 
 
 def abort_active_certification_turn(ctx: Context, thread_id: str) -> dict[str, Any]:
@@ -1165,17 +1169,18 @@ def _certification_result(summary: dict[str, Any], *, status: str, response: str
     }
 
 
-def certify_build(ctx: Context, thread_id: str, timeout: float) -> dict[str, Any]:
+def certify_build(ctx: Context, thread_id: str, timeout: float, model: str, effort: str) -> dict[str, Any]:
     thread = certification_thread_info(ctx, thread_id)
-    original_model = thread.get("model")
-    original_effort = thread.get("effort")
-    if not isinstance(original_model, str) or not original_model:
-        raise RuntimeError("Certification thread has no current model to restore")
     supported_efforts = ("low", "medium", "high", "xhigh", "max", "ultra")
-    if original_effort not in supported_efforts:
-        raise RuntimeError("Certification thread has no supported reasoning effort to restore")
+    if not isinstance(model, str) or not model:
+        raise ValueError("Certification model must be non-empty")
+    if effort not in supported_efforts:
+        raise ValueError("Certification reasoning effort is unsupported")
+    set_thread_settings(ctx, thread_id, model, effort)
+    thread["model"] = model
+    thread["effort"] = effort
     try:
-        receipt = _certify_build_e2e(ctx, thread_id, timeout, thread, original_model, original_effort)
+        receipt = _certify_build_e2e(ctx, thread_id, timeout, thread, model, effort)
     except BaseException:
         certification_path(ctx).unlink(missing_ok=True)
         try:
@@ -1183,12 +1188,12 @@ def certify_build(ctx: Context, thread_id: str, timeout: float) -> dict[str, Any
         except Exception:
             pass
         try:
-            restore_thread_settings(ctx, thread_id, original_model, original_effort)
+            restore_thread_settings(ctx, thread_id, model, effort)
         except Exception:
             pass
         raise
     try:
-        restore_thread_settings(ctx, thread_id, original_model, original_effort)
+        restore_thread_settings(ctx, thread_id, model, effort)
     except Exception:
         certification_path(ctx).unlink(missing_ok=True)
         raise
@@ -1405,7 +1410,7 @@ def parser() -> argparse.ArgumentParser:
     wait = sub.add_parser("wait"); wait.add_argument("--job", required=True); wait.add_argument("--timeout", type=float, default=600)
     steer = sub.add_parser("steer"); steer.add_argument("--job", required=True); steer.add_argument("--prompt", required=True); steer.add_argument("--model"); steer.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max", "ultra"))
     interrupt = sub.add_parser("interrupt"); interrupt.add_argument("--job", required=True)
-    certify = sub.add_parser("certify"); certify.add_argument("--thread", required=True); certify.add_argument("--timeout", type=float, default=240)
+    certify = sub.add_parser("certify"); certify.add_argument("--thread", required=True); certify.add_argument("--timeout", type=float, default=240); certify.add_argument("--model", default="gpt-5.6-sol"); certify.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max", "ultra"), default="low")
     return result
 
 
@@ -1429,7 +1434,7 @@ def main() -> int:
     elif args.command == "interrupt":
         output = interrupt_job(ctx, args.job)
     elif args.command == "certify":
-        output = certify_build(ctx, args.thread, args.timeout)
+        output = certify_build(ctx, args.thread, args.timeout, args.model, args.effort)
     else:
         return 2
     print(json.dumps(output, ensure_ascii=False))

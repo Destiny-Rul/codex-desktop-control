@@ -23,6 +23,8 @@ jobs:
         run: python skills/codex-desktop-control/scripts/test_protocol_v2.py
       - name: Run owner recovery regression tests
         run: python skills/codex-desktop-control/scripts/test_owner_recovery.py
+      - name: Run certification settings regression tests
+        run: python skills/codex-desktop-control/scripts/test_certification_settings.py
       - name: Build and inspect deterministic release ZIP
         run: python tools/test_release.py
       - name: Parse bootstrap script
