@@ -1,7 +1,7 @@
 ---
 name: codex-desktop-control
 description: Safely control existing Codex Desktop tasks on Windows.
-version: 0.3.10
+version: 0.3.11
 author: Destiny-Rul
 license: MIT
 platforms:
@@ -27,7 +27,7 @@ Control an already-running Codex Desktop task through its structured Windows IPC
 - Immediately after dispatch, start exactly one task-appropriate controller `wait` as a non-blocking background job. Hermes may continue working or communicating in parallel and may inspect progress or steer the active turn when needed, but must not call `process(wait)` to block on that waiter. At most one waiter may be active for a job at any moment.
 - Treat a wait timeout as a review gate, not as task failure: inspect current state, decide whether to keep waiting or steer, and communicate material progress.
 - When Codex completes, Hermes independently reviews and accepts the returned artifacts. If rework is required, repeat the dispatch, single background wait, and independent acceptance cycle.
-- When a user decision is unclear and would materially affect the result, ask a concise selectable question before dispatching that choice.
+- When Hermes does not understand the user's intent within this Skill's Codex-control scope, or a material ambiguity would affect a Codex control, monitoring, or acceptance decision, call the Hermes `clarify` tool and present selectable options instead of guessing or pretending to understand.
 - If owner discovery reports `no-client-found` because a user-designated thread is not open or visible in Codex Desktop, stop before any state-changing operation. Ask a concise selectable question offering to keep the designated thread after the user opens it or to use another thread only if the user explicitly designates that thread. After confirmation, run a fresh read-only `probe` before continuing. Never auto-select a replacement thread, write Codex state directly, use foreground GUI control, or loop retries around the missing owner.
 
 ## Safety contract
