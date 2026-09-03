@@ -26,7 +26,9 @@ def main() -> None:
     assert request["conversationId"] == "thread-1"
     turn_start = request["turnStart"]
     assert turn_start["request"]["threadId"] == "thread-1"
-    assert turn_start["request"]["input"] == [{"type": "text", "text": "hello"}]
+    assert turn_start["request"]["input"] == [
+        {"type": "text", "text": "hello", "text_elements": []}
+    ]
     assert turn_start["request"]["model"] == "model-1"
     assert turn_start["request"]["effort"] == "high"
     assert turn_start["context"]["attachments"] == []

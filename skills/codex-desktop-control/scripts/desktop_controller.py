@@ -789,7 +789,7 @@ def reconcile_job(ctx: Context, job: dict[str, Any], turn_id: str) -> dict[str, 
 def build_turn_request(thread_id: str, prompt: str, model: str | None, effort: str | None, steering: bool) -> dict[str, Any]:
     request: dict[str, Any] = {
         "threadId": thread_id,
-        "input": [{"type": "text", "text": prompt}],
+        "input": [{"type": "text", "text": prompt, "text_elements": []}],
         "attachments": [],
         "clientUserMessageId": str(uuid.uuid4()),
         "additionalContext": {},
