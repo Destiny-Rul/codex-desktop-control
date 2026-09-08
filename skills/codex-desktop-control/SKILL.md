@@ -24,6 +24,8 @@ Control an already-running Codex Desktop task through its structured Windows IPC
 - Codex Desktop may decide autonomously whether to use its own subagents while executing a task; Hermes does not need to authorize each Codex-internal subagent.
 - After obtaining the user's consent, Hermes may control one or multiple Codex Desktop threads that the user explicitly designates. Keep every operation scoped to those threads; never select a thread or expand the controlled set on the user's behalf.
 - Write Codex task prompts primarily in English, request use of FastCtx once, and leave model and reasoning settings under user control. Do not set or change them unless the user explicitly requests it.
+- Prefer direct requests such as "Please inspect..." or "Please implement..." rather than framing instructions as "The user needs...".
+- Split complex work into meaningful, verifiable stages. Provide the overall goal and necessary context, but dispatch only the current stage; review its results before giving the next stage. Do not fragment simple tasks unnecessarily.
 - Immediately after dispatch, start exactly one task-appropriate controller `wait` as a non-blocking background job. Hermes may continue working or communicating in parallel and may inspect progress or steer the active turn when needed, but must not call `process(wait)` to block on that waiter. At most one waiter may be active for a job at any moment.
 - Treat a wait timeout as a review gate, not as task failure: inspect current state, decide whether to keep waiting or steer, and communicate material progress.
 - When Codex completes, Hermes independently reviews and accepts the returned artifacts. If rework is required, repeat the dispatch, single background wait, and independent acceptance cycle.
