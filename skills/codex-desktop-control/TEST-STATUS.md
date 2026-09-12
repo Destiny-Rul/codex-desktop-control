@@ -1,29 +1,23 @@
 # Codex Desktop Control certification status
 
-- Skill version: `0.3.12`
-- Last certified Codex Desktop build: `26.901.1978.0`
-- Certified at: `2026-09-03T03:54:00.296716+00:00`
-- Certification scope: Windows x86-64, profile-local receipt
+- Skill version: `0.3.13`
+- Live certification: passed at `2026-09-12T10:05:45.561311+00:00` (research profile)
+- Target Desktop build: `26.908.4834.0`
 
-## Status
+Settings IPC now explicitly uses version 2 and requires `applied: true` before
+continuing. It updates next-turn settings, not active-turn permissions.
+The plain text `text_elements: []` rendering fix remains in place.
 
-v0.3.12 passed live Codex Desktop certification on build `26.901.1978.0` after
-adding the required empty `text_elements` array to plain text turn input. The
-unfixed request was accepted by the backend but caused the visible Desktop UI
-to enter its React error boundary with `Cannot read properties of undefined
-(reading 'length')`. Two focused send tests and the complete certification
-sequence produced no matching error boundary after the fix.
+Offline settings-v2, protocol, owner recovery and certification settings tests
+passed. A backend acknowledgement alone is not UI acceptance: live validation
+must inspect actual test-window Desktop logs for renderer error boundaries.
 
-Certification used the portable model `gpt-5.6-sol` and reasoning effort
-`low`. Send/wait/status, settings round-trip and restoration, same-turn steer,
-exact-turn interrupt, final owner discovery, and post-certification online
-doctor checks passed. The Desktop main process remained stable and the test
-thread settings were restored to `gpt-5.6-sol` / `low`.
+Live send/wait/status, settings round-trip and restoration, same-turn steer,
+exact interrupt and final probe passed. Post-certification online doctor
+reported certified with writes enabled. The inspected certification window
+contained 95 log lines, including 42 test-thread lines, with no matching React
+error boundary, undefined-property error, EPIPE or crash marker. This is log
+acceptance, not a claim of independently observed visual UI health.
 
-Only the test-thread ID is installation/profile-local and must be designated by
-the user. A missing or not-open designated thread requires a selectable user
-question; the controller and Hermes must not choose a replacement automatically.
-
-Certification receipts are machine-, profile-, skill-version-, Desktop-build-,
-protocol-, and schema-specific. They are runtime data and are never published
-or copied between devices.
+Certification receipts are profile-local runtime data. Never copy them between
+profiles or publish them. Certification uses only a user-designated test thread.

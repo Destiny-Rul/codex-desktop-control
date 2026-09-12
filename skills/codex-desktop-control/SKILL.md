@@ -1,7 +1,7 @@
 ---
 name: codex-desktop-control
 description: Safely control existing Codex Desktop tasks on Windows.
-version: 0.3.12
+version: 0.3.13
 author: Destiny-Rul
 license: MIT
 platforms:

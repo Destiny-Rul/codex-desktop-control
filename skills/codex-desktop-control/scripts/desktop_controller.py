@@ -557,7 +557,9 @@ async function main(){
   const init=await sendRequest('initialize',{clientType:'farfield'},{sourceClientId:'initializing-client'});clientId=init?.result?.clientId;if(!clientId)throw new Error('IPC initialize did not return clientId');
   let ownerClientId;try{ownerClientId=await discoverOwner(input.threadId)}catch(error){if(!(error instanceof IpcResponseError) || error.ipcError!=='no-handler-for-request')throw error;}if(!ownerClientId)ownerClientId=await waitForOwner(input.threadId);let result=null;
   if((input.operation==='send' || input.operation==='steer' || input.operation==='settings') && input.threadSettings && Object.keys(input.threadSettings).length>0){
-    await sendRequest('thread-follower-update-thread-settings',{conversationId:input.threadId,threadSettings:input.threadSettings},{targetClientId:ownerClientId});
+    // No activeTurnId: model/effort changes apply to the next turn, not active permissions.
+    const settingsResponse=await sendRequest('thread-follower-update-thread-settings',{conversationId:input.threadId,threadSettings:input.threadSettings},{targetClientId:ownerClientId,version:2});
+    if(settingsResponse.resultType!=='success' || settingsResponse.result?.applied!==true)throw new Error('IPC thread settings were not acknowledged as applied');
   }
   if(input.operation==='send'){
     const response=await sendRequest('thread-follower-start-turn',input.params,{targetClientId:ownerClientId,version:input.startTurnVersion??1});result=response.result??null;

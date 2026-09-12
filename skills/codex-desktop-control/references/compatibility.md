@@ -4,6 +4,8 @@ This release is fail-closed but does not equate a UI bundle hash change with a p
 
 ## Compatibility levels
 
+v0.3.13 targets settings-method v2, as observed in Desktop 26.908.4834.0. Older settings-v1 builds remain fail-closed; the historical reference build below is audit evidence, not a supported-version promise. IPC success alone does not prove UI health: live acceptance must check actual test-window Desktop logs for React error boundaries and verify the visible test-thread UI where necessary.
+
 1. **Incompatible.** A required IPC anchor or method version is missing, multiple distinct Desktop builds are running, the executable is outside the official package path, a required database column is missing, a migration failed, or `PRAGMA quick_check` fails. No live Desktop operation is allowed.
 2. **Structurally compatible.** The current build satisfies the protocol contract and database requirements, but no exact local certification receipt matches it. `probe`, `status`, and `wait` remain available; `send`, `steer`, and `interrupt` are blocked.
 3. **Certified.** `certify` completed on an explicitly designated test thread and its receipt exactly matches the current Skill version, protocol contract, Desktop version, executable hash, protocol-payload hash, protocol fingerprint, migration count, and migration fingerprint. All commands are available.

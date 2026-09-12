@@ -8,8 +8,8 @@ Initialize as `clientType: farfield`, then use `thread-owner-discovery` with `ho
 
 For a send with model or effort overrides, issue operations in this exact order:
 
-1. `thread-follower-update-thread-settings` with `conversationId` and `threadSettings`.
-2. Require a successful response.
+1. `thread-follower-update-thread-settings` version **2** with `conversationId` and `threadSettings`. Omit `activeTurnId` to update next-turn settings rather than active-turn permissions; omit optional `condition` for an unconditional requested update.
+2. Require a successful response with `result.applied === true`. False, missing, null or malformed acknowledgement must stop before starting or steering a turn. Do not retry using v1. Certification also reads back the actual model and effort.
 3. For a new turn, call `thread-follower-start-turn` **version 2** with `conversationId` and `turnStart: {request, context}`. Every text input must include `text_elements: []` when it has no structured spans; Codex Desktop 26.901 reads this array during rendering even though its backend still accepts the older omitted field. The request contains `threadId`, input, model and effort; the context contains the attachment arrays and `inheritThreadSettings: true`. Require the acknowledged `turn.id`.
 4. For guidance on an active turn, call `thread-follower-steer-turn` with the exact conversation and text input; require its `turnId` to equal the parent job's active turn.
 5. If either acknowledgement is absent or mismatched, persist the outcome as uncertain and do not retry automatically. An explicit IPC `no-client-found` response from a targeted request is different: it is a negative acknowledgement that the targeted client did not exist. The controller may reconnect once, rediscover the owner, and resend the same operation. A `no-client-found` response from `thread-owner-discovery` means there is no current owner and must fail closed; it must not fall back to follower broadcasts. Any second targeted `no-client-found`, timeout, malformed response, or other error remains fail-closed.
