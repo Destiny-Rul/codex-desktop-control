@@ -1,7 +1,7 @@
 ---
 name: codex-desktop-control
 description: Safely control existing Codex Desktop tasks on Windows.
-version: 0.3.13
+version: 0.3.14
 author: Destiny-Rul
 license: MIT
 platforms:
@@ -25,6 +25,7 @@ Control an already-running Codex Desktop task through its structured Windows IPC
 - After obtaining the user's consent, Hermes may control one or multiple Codex Desktop threads that the user explicitly designates. Keep every operation scoped to those threads; never select a thread or expand the controlled set on the user's behalf.
 - Write Codex task prompts primarily in English, request use of FastCtx once, and leave model and reasoning settings under user control. Do not set or change them unless the user explicitly requests it.
 - Prefer direct requests such as "Please inspect..." or "Please implement..." rather than framing instructions as "The user needs...".
+- Continually refine control prompts from Codex's replies and observed execution. Keep English-first, direct requests; adapt wording and detail to be precise and concise, rather than repeating a rigid template. Prefer one bounded, verifiable stage at a time. Finish each stage with real evidence, not a half-finished deliverable, and stop at its acceptance boundary without inventing extra work or expanding the authorized scope.
 - Split complex work into meaningful, verifiable stages. Provide the overall goal and necessary context, but dispatch only the current stage; review its results before giving the next stage. Do not fragment simple tasks unnecessarily.
 - Immediately after dispatch, start exactly one task-appropriate controller `wait` as a non-blocking background job. Hermes may continue working or communicating in parallel and may inspect progress or steer the active turn when needed, but must not call `process(wait)` to block on that waiter. At most one waiter may be active for a job at any moment.
 - Treat a wait timeout as a review gate, not as task failure: inspect current state, decide whether to keep waiting or steer, and communicate material progress.
@@ -43,7 +44,8 @@ Control an already-running Codex Desktop task through its structured Windows IPC
 - Treat `certify` as a state-changing maintenance operation. It sends test turns, changes and restores model settings, steers one turn, and interrupts one turn on that exact test thread. Never choose a thread automatically.
 - Certification defaults portably to model `gpt-5.6-sol` and reasoning effort `low`; an explicit user choice may override either with `certify --model MODEL --effort EFFORT`. Only the test-thread ID is installation/profile-local and must always be user-designated. Confirm that thread exists, is unarchived, and is idle before applying certification settings. If it is missing or not open, ask a selectable user question and never select a replacement automatically.
 - **Upgrade recovery:** run `doctor.py --offline`, then the online doctor after a Desktop build/schema or migration warning. If it reports `structurally-compatible` with stale certification, use the already user-designated working/test thread only when the user explicitly authorizes automatic continuation or names that thread; run `certify --thread ID`, then rerun online doctor and `probe` before the next `send`. Do not bypass certification, retry a blocked send, or substitute foreground UI control.
-- Keep generated jobs and temporary files below the selected profile's Skill data directory.
+- Keep generated jobs and temporary files below the selected profile's Skill data directory. Queue ledgers and immutable terminal history instead use the shared controller sidecar outside Codex home, so profiles cannot reserve the same thread independently.
+- Queue enqueue requires ordinary valid profile certification plus the exact tested Desktop build/hash and queue protocol in `references/native-queue.md`. Adoption requires independently verified empty visible queue and exclusive controller management: no manual queue edits or other producers. One pending/unknown slot per canonical home/thread; never retry uncertain enqueue or delete its ledger. There is no cancel/reset support.
 - Do not fall back to global `PATH`, `~/.codex`, Hermes configuration, PowerShell profiles, or ambient credentials.
 
 ## Commands
@@ -64,6 +66,8 @@ Use these subcommands:
 - `wait --job JOB --timeout SECONDS`: perform bounded Windows rollout monitoring until terminal state.
 - `steer --job JOB --prompt TEXT [--model MODEL --effort EFFORT]`: steer the exact active turn.
 - `interrupt --job JOB`: interrupt the exact active turn.
+- `queue enqueue --thread ID --prompt TEXT [--adopt-empty-exclusive]`: submit one native follow-up without steering the current turn. Busy work finishes before native follow-up execution; idle execution is allowed. First use requires explicit empty/exclusive adoption; proven release permits reuse without re-adoption.
+- `queue status --thread ID [--observe]`: reconcile exact persisted native client ID to running/terminal turn evidence and archive terminal proof before releasing the slot. Default status is local and available without certification; `--observe` adds gated read-only IPC. Queue IDs are not job IDs: use bounded background status monitoring, not `wait --job` with a queue ID. Missing/ambiguous evidence remains unknown/reserved.
 - `certify --thread ID [--model MODEL] [--effort EFFORT] [--timeout SECONDS]`: apply the portable `gpt-5.6-sol`/`low` defaults unless explicitly overridden, then run the complete compatibility test on the user-designated thread and write a build-bound local receipt only after every check passes.
 
 ## References
@@ -71,6 +75,7 @@ Use these subcommands:
 - Read `references/compatibility.md` when Desktop, Node, or the state schema changes.
 - Read `references/protocol.md` when debugging IPC or rollout events.
 - Read `references/security.md` before changing paths, subprocess environments, job reconciliation, or dependency bootstrap behavior.
+- Read `references/native-queue.md` and `references/queue-lifecycle.md` before queue adoption, enqueue, monitoring or acceptance. The legacy `--acceptance-test` label bypasses no gate.
 - Treat `references/dependencies.lock.json` as the only dependency source of truth.
 
 Protocol incompatibility, missing required database structure, stale certification, ambiguous uncertain jobs, and failed setting restoration must fail closed.

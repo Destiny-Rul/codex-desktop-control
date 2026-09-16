@@ -27,6 +27,12 @@ jobs:
         run: python skills/codex-desktop-control/scripts/test_certification_settings.py
       - name: Run settings v2 transport regression tests
         run: python skills/codex-desktop-control/scripts/test_settings_v2.py
+      - name: Run certification concurrency and latency regressions
+        run: python skills/codex-desktop-control/scripts/test_certification_concurrency.py
+      - name: Run queue authorization, single-slot and offline Node loopback regressions
+        run: python skills/codex-desktop-control/scripts/test_native_queue.py
+      - name: Run exact queue lifecycle and receipt regressions
+        run: python skills/codex-desktop-control/scripts/test_queue_lifecycle.py
       - name: Build and inspect deterministic release ZIP
         run: python tools/test_release.py
       - name: Parse bootstrap script

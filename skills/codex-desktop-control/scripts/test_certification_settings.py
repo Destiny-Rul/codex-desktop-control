@@ -33,7 +33,7 @@ def main() -> None:
     ])
     assert (overrides.model, overrides.effort) == ("custom-model", "high")
 
-    ctx = SimpleNamespace(runtime=Path.cwd() / ".certification-test-runtime")
+    ctx = SimpleNamespace(runtime=Path.cwd() / ".certification-test-runtime", desktop_home=Path.cwd())
     eligible = {"title": "test", "archived": False, "model": "old", "effort": "medium"}
     events: list[object] = []
 
@@ -52,9 +52,9 @@ def main() -> None:
         controller, "set_thread_settings", side_effect=apply
     ), patch.object(controller, "_certify_build_e2e", side_effect=certify), patch.object(
         controller, "restore_thread_settings"
-    ) as restore:
+    ) as restore, patch.object(controller, '_atomic_json'):
         result = controller.certify_build(ctx, "thread-1", 30, "gpt-5.6-sol", "low")
-    assert result == {"overall_ok": True}
+    assert result['overall_ok'] is True
     assert events == ["inspect", ("apply", "gpt-5.6-sol", "low"), ("certify", "gpt-5.6-sol", "low", "gpt-5.6-sol", "low")]
     restore.assert_called_once_with(ctx, "thread-1", "gpt-5.6-sol", "low")
 

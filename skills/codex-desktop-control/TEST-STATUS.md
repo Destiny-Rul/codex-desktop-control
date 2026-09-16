@@ -1,8 +1,35 @@
 # Codex Desktop Control certification status
 
-- Skill version: `0.3.13`
-- Live certification: passed at `2026-09-12T10:05:45.561311+00:00` (research profile)
-- Target Desktop build: `26.908.4834.0`
+- Skill version: `0.3.14`
+- Reusable queue live acceptance: independently accepted on the exact pinned build
+- v0.3.14 live certification: pending; version bump invalidates earlier profile receipts
+- Queue target Desktop build: `26.908.9136.0` (exact archive hash pinned)
+
+Stage 1 independent live acceptance was reported by the user at
+`2026-09-15T08:50:10.250265+00:00`: total 40.953s, send_settings 12.531s,
+steer 21.797s, interrupt 0.641s; 69 Desktop log lines including 31 test-thread
+lines had no matching renderer errors. This is historical evidence, not live
+certification of the changed queue code. No live operations were run for queue
+initial implementation. The one native queue trial on 2026-09-16 functionally
+passed: persisted UserMessage.client_id exactly correlated to the completed
+distinct follow-up turn. ResizeObserver warnings occurred before and during that
+trial and are reported separately, not treated as proof of a queue failure or
+a generic zero-console-errors functional prerequisite.
+
+On 2026-09-16, two further busy enqueue cycles passed independent review of
+original rollout ordering, both exact UserMessage.client_id mappings and all
+three immutable ledger history hashes. Each starter completed before its distinct
+follow-up began (96ms and 93ms respectively). Each slot released through exact
+terminal reconciliation; second enqueue rejected before IPC, history remained
+unchanged and settings were preserved. The repeated-use window contained 126
+Desktop log lines (44 test-thread lines), with no ResizeObserver or matching new
+renderer errors. These bounded observations do not certify broader builds or
+another profile. See `references/queue-lifecycle.md` for the acceptance procedure.
+
+Finalization runs offline regression and deterministic package checks only.
+No v0.3.14 live certification, installation or live queue test was performed.
+Each target profile must run authorized certification on its user-designated
+idle test thread before v0.3.14 writes; never transplant a receipt.
 
 Settings IPC now explicitly uses version 2 and requires `applied: true` before
 continuing. It updates next-turn settings, not active-turn permissions.
@@ -12,7 +39,7 @@ Offline settings-v2, protocol, owner recovery and certification settings tests
 passed. A backend acknowledgement alone is not UI acceptance: live validation
 must inspect actual test-window Desktop logs for renderer error boundaries.
 
-Live send/wait/status, settings round-trip and restoration, same-turn steer,
+Historical (pre-Stage 1) live send/wait/status, settings round-trip and restoration, same-turn steer,
 exact interrupt and final probe passed. Post-certification online doctor
 reported certified with writes enabled. The inspected certification window
 contained 95 log lines, including 42 test-thread lines, with no matching React

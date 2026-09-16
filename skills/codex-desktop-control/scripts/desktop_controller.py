@@ -14,6 +14,8 @@ import subprocess
 import sys
 import time
 import uuid
+import tempfile
+from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -275,6 +277,7 @@ def compatibility_identity(ctx: Context, desktop: dict[str, Any], schema: dict[s
         raise RuntimeError("Cannot identify an incompatible Desktop build or schema")
     return {
         "skill_version": str(ctx.lock["skill_version"]),
+        "certification_revision": 2,
         "protocol_contract_sha256": protocol_contract_sha256(ctx),
         "desktop_version": str(build["version"]),
         "desktop_executable_sha256": str(build["desktop_executable_sha256"]),
@@ -532,6 +535,7 @@ const owners = new Map();
 const ownerUpdatedAt = new Map();
 const OWNER_SETTLE_MS = 250;
 const pending = new Map();
+const queueFrames = [];
 let socket, buffer = Buffer.alloc(0), clientId = null;
 class IpcResponseError extends Error { constructor(method,error,targeted){super(`IPC ${method} failed: ${JSON.stringify(error)}`);this.name='IpcResponseError';this.method=method;this.ipcError=error;this.targeted=targeted;} }
 function writeFrame(frame) { const body = Buffer.from(JSON.stringify(frame), 'utf8'); const header = Buffer.alloc(4); header.writeUInt32LE(body.length, 0); socket.write(Buffer.concat([header, body])); }
@@ -545,6 +549,10 @@ function sendRequest(method, params, options = {}) {
 function handleFrame(frame) {
   if (frame.type==='client-discovery-request') { writeFrame({type:'client-discovery-response',requestId:frame.requestId,response:{canHandle:false}}); return; }
   if (frame.type==='request') { writeFrame({type:'response',requestId:frame.requestId,resultType:'error',error:'no-handler-for-request'}); return; }
+  if (frame.type==='broadcast' && frame.method==='thread-queued-followups-changed' && frame.params?.hostId==='local' && frame.params?.conversationId===input.threadId) {
+    if(queueFrames.length>=1000)throw new Error('Queue observation overflow; state uncertain');
+    queueFrames.push(frame);
+  }
   if (frame.type==='broadcast' && frame.method==='thread-stream-following-changed' && frame.params?.following===true && frame.sourceClientId) { const id=frame.params.conversationId||frame.params.threadId; if(id) { owners.set(id,frame.sourceClientId); ownerUpdatedAt.set(id,Date.now()); } }
   if (frame.type!=='response') return; const item=pending.get(frame.requestId); if(!item) return; pending.delete(frame.requestId); clearTimeout(item.timer);
   if(frame.resultType==='error') item.reject(new IpcResponseError(item.method,frame.error,item.targeted)); else item.resolve(frame);
@@ -552,9 +560,42 @@ function handleFrame(frame) {
 function handleData(chunk) { buffer=Buffer.concat([buffer,chunk]); while(buffer.length>=4){const size=buffer.readUInt32LE(0);if(size>32*1024*1024)throw new Error(`IPC frame too large: ${size}`);if(buffer.length<size+4)return;const frame=JSON.parse(buffer.subarray(4,size+4).toString('utf8'));buffer=buffer.subarray(size+4);handleFrame(frame);} }
 function waitForOwner(id,timeoutMs=7000,ownerSettleMs=OWNER_SETTLE_MS){return new Promise((resolve,reject)=>{const deadline=Date.now()+timeoutMs;const timer=setInterval(()=>{const owner=owners.get(id);if(owner && Date.now()-ownerUpdatedAt.get(id)>=ownerSettleMs){clearInterval(timer);resolve(owner);}else if(Date.now()>=deadline){clearInterval(timer);reject(new Error(`No visible Codex Desktop owner announced thread ${id}`));}},20);});}
 async function discoverOwner(id){const response=await sendRequest('thread-owner-discovery',{hostId:'local',conversationId:id});return typeof response.handledByClientId==='string'&&response.handledByClientId.length>0?response.handledByClientId:null;}
+async function queueOperation(){
+  // A following announcement is not owner authority. Queue operations never use
+  // the older following-broadcast fallback, nor any send/steer/settings method.
+  const owner=await discoverOwner(input.threadId);
+  if(!owner)throw new Error('Queue owner discovery unavailable');
+  const observeMs=input.observeMs??500;
+  if(!Number.isInteger(observeMs)||observeMs<0||observeMs>5000)throw new Error('Invalid queue observation bound');
+  await new Promise(resolve=>setTimeout(resolve,observeMs));
+  if(await discoverOwner(input.threadId)!==owner)throw new Error('Queue owner changed before submission');
+  const authoritative=()=>queueFrames.filter(f=>f.sourceClientId===owner);
+  const valid=f=>f.version===2 && Array.isArray(f.params.messages) && f.params.messages.every(m=>m && typeof m==='object' && typeof m.id==='string');
+  let result=null;
+  if(input.operation==='queue-enqueue'){
+    if(input.adoptEmptyExclusive!==true)throw new Error('Exclusive empty-queue adoption required');
+    if(authoritative().some(f=>!valid(f)||f.params.messages.length!==0))throw new Error('Preexisting or malformed native queue observed; refusing overwrite');
+    const item=input.item;
+    if(!item||typeof item.id!=='string'||typeof item.text!=='string'||item.context?.prompt!==item.text)throw new Error('Invalid queue item');
+    // From here onward, *any* uncertainty reserves the durable Python intent.
+    const response=await sendRequest('thread-follower-set-queued-follow-ups-state',
+      {conversationId:input.threadId,state:{[input.threadId]:[item]}},{targetClientId:owner,version:1});
+    if(response.resultType!=='success'||response.result?.ok!==true)throw new Error('Native queue setter not acknowledged');
+    result=response.result;
+    await new Promise(resolve=>setTimeout(resolve,observeMs));
+  }
+  if(await discoverOwner(input.threadId)!==owner)throw new Error('Queue owner changed; state uncertain');
+  const frames=authoritative(),last=frames.at(-1);
+  const observation=!last?{kind:'unknown'}:!valid(last)?{kind:'unknown'}:
+    {kind:last.params.messages.length===0?'empty':'present',messages:last.params.messages};
+  return {connected:true,threadId:input.threadId,clientId,ownerClientId:owner,result,queueObservation:observation};
+}
 async function main(){
   socket=net.createConnection(input.pipe);socket.on('data',handleData);await new Promise((resolve,reject)=>{socket.once('connect',resolve);socket.once('error',reject);});
   const init=await sendRequest('initialize',{clientType:'farfield'},{sourceClientId:'initializing-client'});clientId=init?.result?.clientId;if(!clientId)throw new Error('IPC initialize did not return clientId');
+  if(input.operation==='queue-enqueue'||input.operation==='queue-observe'){
+    const output=await queueOperation();process.stdout.write(JSON.stringify(output));socket.destroy();return;
+  }
   let ownerClientId;try{ownerClientId=await discoverOwner(input.threadId)}catch(error){if(!(error instanceof IpcResponseError) || error.ipcError!=='no-handler-for-request')throw error;}if(!ownerClientId)ownerClientId=await waitForOwner(input.threadId);let result=null;
   if((input.operation==='send' || input.operation==='steer' || input.operation==='settings') && input.threadSettings && Object.keys(input.threadSettings).length>0){
     // No activeTurnId: model/effort changes apply to the next turn, not active permissions.
@@ -595,7 +636,7 @@ def run_ipc(ctx: Context, payload: dict[str, Any], timeout: float = 55, retry_ow
     for attempt in range(2 if retry_owner_missing else 1):
         completed = subprocess.run(
             [str(ctx.node), "--input-type=module", "-e", NODE_BRIDGE],
-            input=json.dumps(payload, ensure_ascii=False), text=True, capture_output=True, timeout=timeout,
+            input=json.dumps(payload, ensure_ascii=False), text=True, encoding="utf-8", capture_output=True, timeout=timeout,
             cwd=ctx.runtime, env=minimal_environment(ctx),
         )
         if completed.returncode == 0:
@@ -607,7 +648,7 @@ def run_ipc(ctx: Context, payload: dict[str, Any], timeout: float = 55, retry_ow
                 raise RuntimeError("Codex Desktop IPC bridge returned a non-object result")
             return result
         message = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
-        if attempt == 0 and _is_explicit_no_client_rejection(completed.stderr, completed.stdout):
+        if retry_owner_missing and attempt == 0 and _is_explicit_no_client_rejection(completed.stderr, completed.stdout):
             continue
         raise RuntimeError(f"Codex Desktop IPC bridge failed: {message}")
     raise AssertionError("unreachable")
@@ -841,7 +882,7 @@ def extract_ack_turn(result: dict[str, Any]) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-def submit_turn(ctx: Context, *, thread_id: str, prompt: str, model: str | None, effort: str | None, steering: bool = False, target_turn: str | None = None, parent_job: str | None = None) -> dict[str, Any]:
+def submit_turn(ctx: Context, *, thread_id: str, prompt: str, model: str | None, effort: str | None, steering: bool = False, target_turn: str | None = None, parent_job: str | None = None, accepted_turns: set[str] | None = None) -> dict[str, Any]:
     rollout = find_rollout(ctx, thread_id)
     if rollout is None:
         raise RuntimeError("No persisted rollout exists for the Desktop thread")
@@ -884,6 +925,10 @@ def submit_turn(ctx: Context, *, thread_id: str, prompt: str, model: str | None,
         job.update({"submission_status": "uncertain", "submission_error": f"Steer acknowledged unexpected turn {ack}"})
         save_job(ctx, job)
         raise RuntimeError(f"Desktop steer outcome is uncertain; inspect job {job['job_id']}")
+    # Only a validated new-turn acknowledgement establishes cleanup ownership.
+    # Record before persistence/rollout summarization can fail or lag behind IPC.
+    if not steering and accepted_turns is not None and _valid_turn_id(ack):
+        accepted_turns.add(ack)
     job.update({"owner_client_id": result.get("ownerClientId"), "controller_client_id": result.get("clientId"), "ipc_ack_turn_id": ack, "accepted_turn_id": None if steering else ack, "submission_status": "accepted"})
     save_job(ctx, job)
     return summarize_job(ctx, job)
@@ -1129,12 +1174,12 @@ def restore_thread_settings(ctx: Context, thread_id: str, model: str, effort: st
     set_thread_settings(ctx, thread_id, model, effort)
 
 
-def abort_active_certification_turn(ctx: Context, thread_id: str) -> dict[str, Any]:
+def abort_active_certification_turn(ctx: Context, thread_id: str, owned_turns: set[str]) -> dict[str, Any]:
     rollout = find_rollout(ctx, thread_id)
     if rollout is None:
         return {"interrupted": False, "turn_id": None}
     turn_id = find_active_turn(rollout)
-    if turn_id is None:
+    if turn_id is None or turn_id not in owned_turns:
         return {"interrupted": False, "turn_id": None}
     result = run_ipc(
         ctx,
@@ -1157,7 +1202,9 @@ def abort_active_certification_turn(ctx: Context, thread_id: str) -> dict[str, A
 
 
 def _certification_result(summary: dict[str, Any], *, status: str, response: str | None = None) -> dict[str, Any]:
-    ok = summary.get("status") == status
+    error = summary.get("error")
+    expected_interruption = status == 'interrupted' and isinstance(error, str) and error in ('turn_aborted', 'turn_interrupted')
+    ok = summary.get("status") == status and (not error or expected_interruption)
     if response is not None:
         final_response = summary.get("final_response")
         ok = ok and isinstance(final_response, str) and final_response.strip() == response
@@ -1171,22 +1218,87 @@ def _certification_result(summary: dict[str, Any], *, status: str, response: str
     }
 
 
+@contextmanager
+def _certification_lock(key: str):
+    digest = hashlib.sha256(key.encode('utf-8')).hexdigest()
+    if os.name == 'nt':
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+        kernel.CreateMutexW.restype = wintypes.HANDLE
+        kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel.ReleaseMutex.argtypes = [wintypes.HANDLE]
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        handle = kernel.CreateMutexW(None, False, 'Global\\CodexCertification-' + digest)
+        if not handle:
+            raise ctypes.WinError(ctypes.get_last_error())
+        acquired = False
+        try:
+            result = kernel.WaitForSingleObject(handle, 0)
+            if result not in (0, 0x80):
+                raise RuntimeError('Certification already running or lock unavailable')
+            acquired = True
+            yield
+        finally:
+            if acquired:
+                kernel.ReleaseMutex(handle)
+            kernel.CloseHandle(handle)
+    else:
+        import fcntl
+        path = Path(tempfile.gettempdir()) / ('codex-certification-' + digest + '.lock')
+        with path.open('a+b') as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise RuntimeError('Certification already running') from exc
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+@contextmanager
+def certification_locks(ctx: Context, thread_id: str):
+    # Fixed order: profile receipt, then canonical Desktop home/thread.
+    receipt = os.path.normcase(str(certification_path(ctx).resolve()))
+    home = os.path.normcase(str(ctx.desktop_home.resolve()))
+    with ExitStack() as stack:
+        stack.enter_context(_certification_lock('receipt:' + receipt))
+        stack.enter_context(_certification_lock('thread:' + home + ':' + thread_id))
+        yield
+
+
+def certification_fixture_command() -> str:
+    return 'import time; time.sleep(5)'
+
+
 def certify_build(ctx: Context, thread_id: str, timeout: float, model: str, effort: str) -> dict[str, Any]:
+    thread_id = _safe_id(thread_id, 'certification thread id')
+    with certification_locks(ctx, thread_id):
+        return _certify_locked(ctx, thread_id, timeout, model, effort)
+
+
+def _certify_locked(ctx: Context, thread_id: str, timeout: float, model: str, effort: str) -> dict[str, Any]:
+    started = time.monotonic()
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError('Certification timeout must be positive and finite')
     thread = certification_thread_info(ctx, thread_id)
     supported_efforts = ("low", "medium", "high", "xhigh", "max", "ultra")
     if not isinstance(model, str) or not model:
         raise ValueError("Certification model must be non-empty")
     if effort not in supported_efforts:
         raise ValueError("Certification reasoning effort is unsupported")
+    certification_path(ctx).unlink(missing_ok=True)
+    owned_turns: set[str] = set()
     set_thread_settings(ctx, thread_id, model, effort)
     thread["model"] = model
     thread["effort"] = effort
     try:
-        receipt = _certify_build_e2e(ctx, thread_id, timeout, thread, model, effort)
+        receipt = _certify_build_e2e(ctx, thread_id, timeout, thread, model, effort, owned_turns)
     except BaseException:
         certification_path(ctx).unlink(missing_ok=True)
         try:
-            abort_active_certification_turn(ctx, thread_id)
+            abort_active_certification_turn(ctx, thread_id, owned_turns)
         except Exception:
             pass
         try:
@@ -1195,7 +1307,10 @@ def certify_build(ctx: Context, thread_id: str, timeout: float, model: str, effo
             pass
         raise
     try:
+        restore_started = time.monotonic()
         restore_thread_settings(ctx, thread_id, model, effort)
+        receipt.setdefault('timings_seconds', {}).update(restoration=time.monotonic()-restore_started, total=time.monotonic()-started)
+        _atomic_json(certification_path(ctx), receipt)
     except Exception:
         certification_path(ctx).unlink(missing_ok=True)
         raise
@@ -1209,7 +1324,17 @@ def _certify_build_e2e(
     thread: dict[str, Any],
     original_model: str,
     original_effort: str,
+    owned_turns: set[str],
 ) -> dict[str, Any]:
+    timings: dict[str, float] = {}
+    phase_started = time.monotonic()
+    def mark(name):
+        nonlocal phase_started
+        now = time.monotonic()
+        timings[name] = now - phase_started
+        phase_started = now
+    def submit(**kwargs):
+        return submit_turn(ctx, accepted_turns=owned_turns, **kwargs)
     timeout = float(timeout)
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("Certification timeout must be positive and finite")
@@ -1224,8 +1349,8 @@ def _certify_build_e2e(
     if probe.get("connected") is not True:
         raise RuntimeError("Certification probe did not connect")
 
-    send = submit_turn(
-        ctx,
+    mark('preflight_probe')
+    send = submit(
         thread_id=thread_id,
         prompt="Codex Desktop compatibility certification. Do not read or modify files and do not call tools. Reply exactly: CODEX_DESKTOP_CERT_SEND_OK",
         model=original_model,
@@ -1251,12 +1376,12 @@ def _certify_build_e2e(
     if not changed_ok:
         raise RuntimeError("Certification settings update was not persisted")
 
-    steer_parent = submit_turn(
-        ctx,
+    mark('send_settings')
+    steer_parent = submit(
         thread_id=thread_id,
         prompt=(
             "Codex Desktop compatibility certification. Run this harmless command and wait for it to finish before replying: "
-            "python -c \"import time; time.sleep(30)\". Then reply CERT_STEER_PARENT_UNEXPECTED."
+            f'python -c "{certification_fixture_command()}". Then reply CERT_STEER_PARENT_UNEXPECTED.'
         ),
         model=original_model,
         effort=original_effort,
@@ -1278,8 +1403,7 @@ def _certify_build_e2e(
         "original_settings_restored": True,
     }
     steer_turn = require_active(steer_parent, "Certification steer")
-    steer = submit_turn(
-        ctx,
+    steer = submit(
         thread_id=thread_id,
         prompt="Certification correction: stop the planned response and reply exactly CODEX_DESKTOP_CERT_STEER_OK.",
         model=None,
@@ -1298,12 +1422,12 @@ def _certify_build_e2e(
     if not steer_check["ok"]:
         raise RuntimeError("Certification steer check failed")
 
-    interrupt_parent = submit_turn(
-        ctx,
+    mark('steer')
+    interrupt_parent = submit(
         thread_id=thread_id,
         prompt=(
             "Codex Desktop compatibility certification. Run this harmless command and wait for it to finish before replying: "
-            "python -c \"import time; time.sleep(120)\". Then reply CERT_INTERRUPT_PARENT_UNEXPECTED."
+            f'python -c "{certification_fixture_command()}". Then reply CERT_INTERRUPT_PARENT_UNEXPECTED.'
         ),
         model=None,
         effort=None,
@@ -1319,6 +1443,7 @@ def _certify_build_e2e(
     interrupt_check["ok"] = bool(interrupt_check["ok"] and interrupt_check["exact_ack"])
     if not interrupt_check["ok"]:
         raise RuntimeError("Certification interrupt check failed")
+    mark('interrupt')
 
     final_probe = run_ipc(ctx, {"operation": "probe", "pipe": PIPE_PATH, "threadId": thread_id})
     if final_probe.get("connected") is not True:
@@ -1339,7 +1464,8 @@ def _certify_build_e2e(
         },
         "overall_ok": True,
     }
-    _atomic_json(receipt_path, receipt)
+    mark('final_probe')
+    receipt['timings_seconds'] = timings
     return receipt
 
 
@@ -1413,6 +1539,14 @@ def parser() -> argparse.ArgumentParser:
     steer = sub.add_parser("steer"); steer.add_argument("--job", required=True); steer.add_argument("--prompt", required=True); steer.add_argument("--model"); steer.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max", "ultra"))
     interrupt = sub.add_parser("interrupt"); interrupt.add_argument("--job", required=True)
     certify = sub.add_parser("certify"); certify.add_argument("--thread", required=True); certify.add_argument("--timeout", type=float, default=240); certify.add_argument("--model", default="gpt-5.6-sol"); certify.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max", "ultra"), default="low")
+    queue = sub.add_parser("queue", help="Experimental native single-slot queue; live acceptance pending")
+    queue_sub = queue.add_subparsers(dest="queue_command", required=True)
+    enqueue = queue_sub.add_parser("enqueue"); enqueue.add_argument("--thread", required=True); enqueue.add_argument("--prompt", required=True)
+    enqueue.add_argument("--adopt-empty-exclusive", action="store_true", help="Attest the visible queue is empty and all queue edits are exclusively controller-managed")
+    enqueue.add_argument("--acceptance-test", action="store_true", help="Legacy acceptance label only; never bypasses certification, build or slot gates")
+    queue_status = queue_sub.add_parser("status"); queue_status.add_argument("--thread", required=True)
+    queue_status.add_argument("--observe", action="store_true", help="Bounded read-only owner broadcast observation; silence is unknown")
+    queue_status.add_argument("--baseline-evidence", help="Explicit one-time legacy reservation migration using a saved pre-submit baseline JSON")
     return result
 
 
@@ -1420,7 +1554,8 @@ def main() -> int:
     args = parser().parse_args()
     ctx = resolve_context(hermes_home=args.hermes_home, profile=args.profile, desktop_codex_home=args.desktop_codex_home)
     ensure_runtime_layout(ctx)
-    compatibility_gate(ctx, args.command)
+    if args.command != "queue":
+        compatibility_gate(ctx, args.command)
     if args.command == "probe":
         output = run_ipc(ctx, {"operation": "probe", "pipe": PIPE_PATH, "threadId": args.thread})
     elif args.command == "send":
@@ -1437,6 +1572,10 @@ def main() -> int:
         output = interrupt_job(ctx, args.job)
     elif args.command == "certify":
         output = certify_build(ctx, args.thread, args.timeout, args.model, args.effort)
+    elif args.command == "queue":
+        import native_queue
+        output = (native_queue.enqueue(ctx, args.thread, args.prompt, adopt_empty_exclusive=args.adopt_empty_exclusive, acceptance_test=args.acceptance_test)
+                  if args.queue_command == "enqueue" else native_queue.status(ctx, args.thread, observe=args.observe, baseline_evidence=args.baseline_evidence))
     else:
         return 2
     print(json.dumps(output, ensure_ascii=False))
