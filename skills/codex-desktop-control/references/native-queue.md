@@ -1,14 +1,16 @@
 # Native single-slot queue
 
-Repeated-use enqueue/status was independently accepted on the exact build below.
+Repeated-use enqueue/status was independently accepted on the prior exact pin.
+The current exact pin has independently verified native structure but awaits the
+bounded one-cycle acceptance below.
 Every enqueue requires ordinary valid certification in the selected profile for
 the current Skill version, Desktop identity and schema, then the exact queue build,
 archive hash and method versions. Exclusive adoption/provenance and a safe slot
 are additionally mandatory. `--acceptance-test` remains a legacy label only and
 bypasses nothing. No separate queue receipt is required: the shipped pin records
 the accepted implementation boundary, not certification of another profile.
-v0.3.14 requires fresh profile certification; no live tests or installs accompanied
-this finalization. Broader builds are not queue-certified.
+The current pin upgrade requires a bounded one-cycle queue acceptance; no live
+queue mutation or installation accompanied it. Broader builds are not queue-certified.
 
 ## Contract and commands
 
@@ -83,12 +85,12 @@ never prompt text/time inference. See `queue-lifecycle.md`; no manual reset exis
 
 ## Inspected native construction and acknowledgement
 
-Pinned Desktop: `26.908.9136.0`, app.asar SHA-256
-`7a46bd6fe162050afbac27d7d5271d19524e887fa0cdd06c0f2d3fa9b606a31d`.
+Pinned Desktop: `26.911.7940.0`, app.asar SHA-256
+`74e7aaf2c112f84ef68a7846d10d1411403e72763f7e93fe046df2f264adf6e0`.
 Both method versions are independently checked: setter v1 and broadcast v2.
 Any other build/capability is rejected, even if ordinary send is certified.
 
-Evidence offsets are zero-based decoded characters in
+The following historical evidence offsets are zero-based decoded characters in
 `webview/assets/app-initial-bcc2ff475eb6.js`:
 
 - `H1t` ~2357643: request `thread-follower-set-queued-follow-ups-state`,
@@ -116,6 +118,30 @@ exactly one setter, then waits briefly for v2 broadcasts from that owner and
 local host/thread. No send, steer, settings, app-tool follow-up, alternative
 app-server, feature flag or direct state write is used. Passive broadcasts have
 no revision; they cannot prove an authoritative current empty queue.
+
+## Bounded one-cycle acceptance after a pin upgrade
+
+Use only the already user-designated dedicated test thread with its released slot
+and intact exclusive-management provenance. Do not re-adopt, reset or edit history.
+
+1. Verify the selected profile has valid ordinary current-version certification for
+   Desktop `26.911.7940.0` and migration 55. Read local queue status and require
+   the prior slot to be terminal/released with its immutable receipt valid. Verify
+   the thread is unarchived, idle and has no manual queue edits; preserve settings.
+2. Start one uniquely marked harmless bounded task through the existing Codex
+   session. Confirm its exact turn is running before proceeding. If it finishes
+   before enqueue, record zero queue writes and stop rather than retrying blindly.
+3. Enqueue exactly one uniquely marked follow-up without
+   `--adopt-empty-exclusive`. Save the controller response, native item ID, owner,
+   setter acknowledgement and observation. Never retry an uncertain submission.
+4. Attempt a second enqueue while reserved. It must fail before IPC. Observe the
+   starter complete, then a distinct next turn. Run local queue status until exact
+   persisted `UserMessage.client_id == item.id` mapping and exact terminal evidence
+   archive the receipt and release the slot. Item disappearance alone proves nothing.
+5. Verify all prior immutable history hashes are unchanged, the new receipt is
+   immutable, the final slot is released, and model/effort are unchanged. Collect
+   bounded rollout/controller receipts and test-window renderer logs. Report exact
+   IDs/order and any new error boundaries separately, then stop after this cycle.
 
 ## Historical initial single-trial procedure
 

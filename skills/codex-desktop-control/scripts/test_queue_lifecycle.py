@@ -196,5 +196,17 @@ class LifecycleTests(unittest.TestCase):
                 self.enqueue(adoption=False)
             ipc.assert_not_called()
 
+    def test_released_slot_survives_exact_queue_pin_upgrade(self):
+        record=self.enqueue(); self.finish(record); status=self.status()
+        ledger=q.load_slot(self.ctx,'thread')
+        ledger['build']='historical-accepted-build'
+        ledger['asar_sha256']='historical-accepted-payload'
+        q.persist(q.slot_path(self.ctx,'thread'),ledger)
+        with patch.object(c,'run_ipc',return_value={'result':{'ok':True}}):
+            next_record=self.enqueue(adoption=False)
+        self.assertTrue(next_record['slot_reserved'])
+        self.assertEqual(next_record['build'],q.BUILD)
+        self.assertEqual(next_record['previous_terminal_receipt'],status['terminal_receipt'])
+
 
 if __name__=='__main__': unittest.main(verbosity=2)

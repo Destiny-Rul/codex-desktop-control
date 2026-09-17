@@ -10,8 +10,8 @@ from pathlib import Path
 
 import desktop_controller as c
 
-BUILD = '26.908.9136.0'
-ASAR_SHA256 = '7a46bd6fe162050afbac27d7d5271d19524e887fa0cdd06c0f2d3fa9b606a31d'
+BUILD = '26.911.7940.0'
+ASAR_SHA256 = '74e7aaf2c112f84ef68a7846d10d1411403e72763f7e93fe046df2f264adf6e0'
 QUEUE_CONTRACT = {'required_anchors': ['thread-follower-set-queued-follow-ups-state', 'thread-queued-followups-changed'],
                   'method_versions': {'thread-follower-set-queued-follow-ups-state': 1, 'thread-queued-followups-changed': 2}}
 
@@ -275,8 +275,10 @@ def enqueue(ctx, thread, prompt, *, adopt_empty_exclusive=False, acceptance_test
             raise RuntimeError('Queue slot reserved (pending/unknown); no replace, retry or automatic reset')
         if previous is not None:
             validate_released(ctx, thread, previous)
-            if (previous.get('exclusive_management_valid') is not True
-                    or previous.get('build') != BUILD or previous.get('asar_sha256') != ASAR_SHA256):
+            # A completed immutable receipt preserves exclusive-management
+            # provenance across a Desktop upgrade. The live gate below still
+            # requires the new exact build/hash before any native write.
+            if previous.get('exclusive_management_valid') is not True:
                 raise RuntimeError('Exclusive-management provenance invalid; no automatic re-adoption')
         elif not adopt_empty_exclusive:
             raise RuntimeError('First use requires --adopt-empty-exclusive: independently verify the visible queue is empty and commit to controller-only queue management')

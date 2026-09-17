@@ -140,6 +140,14 @@ class QueueTests(unittest.TestCase):
 
 
 class GateTests(unittest.TestCase):
+    def test_current_queue_pin_and_method_versions(self):
+        self.assertEqual(q.BUILD, '26.911.7940.0')
+        self.assertEqual(q.ASAR_SHA256, '74e7aaf2c112f84ef68a7846d10d1411403e72763f7e93fe046df2f264adf6e0')
+        self.assertEqual(q.QUEUE_CONTRACT['method_versions'], {
+            'thread-follower-set-queued-follow-ups-state': 1,
+            'thread-queued-followups-changed': 2,
+        })
+
     def test_explicit_rejection_with_retry_disabled(self):
         ctx = SimpleNamespace(node=Path('node'), runtime=Path.cwd())
         failure = subprocess.CompletedProcess([], 1, '', json.dumps({'schema': 1, 'type': 'ipc-rejection', 'reason': 'no-client-found'}))
@@ -168,7 +176,7 @@ class GateTests(unittest.TestCase):
     def test_profile_receipt_authorizes_only_current_identity_without_flag_bypass(self):
         with tempfile.TemporaryDirectory() as root:
             ctx = context(root)
-            expected = {'skill_version': '0.3.14', 'desktop': q.ASAR_SHA256}
+            expected = {'skill_version': '0.3.15', 'desktop': q.ASAR_SHA256}
             desktop = {'ok': True, 'build': {'version': q.BUILD,
                        'desktop_protocol_payload_sha256': q.ASAR_SHA256},
                        'processes': [{'protocol_payload': 'unused'}]}

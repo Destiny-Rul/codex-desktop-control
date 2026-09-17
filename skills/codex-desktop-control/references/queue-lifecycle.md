@@ -1,7 +1,7 @@
 # Reusable single-slot lifecycle
 
 Two-cycle repeated use was independently accepted on Desktop 26.908.9136.0.
-v0.3.14 enables enqueue only with current profile certification and the exact
+v0.3.15 enables enqueue only with current profile certification and the exact
 build/hash/protocol gate documented in `native-queue.md`. Local reconciliation
 and receipt-backed reuse require no live write authorization; no cancel or scheduler exists.
 
