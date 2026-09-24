@@ -1,9 +1,21 @@
 # Codex Desktop Control certification status
 
-- Skill version: `0.3.15`
+- Skill version: `0.3.17`
+- v0.3.17 live certification: pending; the changed Skill identity invalidates the v0.3.16 receipt
+- Portable certification default: `gpt-6-luna` / `low` (not yet verified by a real model turn)
+- v0.3.16 live certification: passed on Desktop `26.917.8451.0` in the research profile; historical only
 - Reusable queue live acceptance: passed on the current pinned build
 - v0.3.15 live certification: passed at `2026-09-17T12:48:39.499574+00:00` (research profile)
 - Queue target Desktop build: `26.911.7940.0` (exact app.asar hash pinned)
+
+The historical v0.3.16 certification completed send/wait/status, settings
+round-trip and restoration, same-turn steer, exact interrupt and final probe
+on Desktop `26.915.4065.0` in 97.031 seconds. Its receipt and test-thread
+settings used the previous model; neither constitutes a `gpt-6-luna` test.
+That v0.3.16 receipt does not certify v0.3.17. Native queue writes remain
+fail-closed because queue acceptance is pinned separately to Desktop
+`26.911.7940.0`; this certification
+does not widen the queue pin.
 
 Stage 1 independent live acceptance was reported by the user at
 `2026-09-15T08:50:10.250265+00:00`: total 40.953s, send_settings 12.531s,

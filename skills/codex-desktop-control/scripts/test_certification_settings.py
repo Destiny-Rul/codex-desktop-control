@@ -26,7 +26,7 @@ def main() -> None:
         "--hermes-home", "C:/hermes", "--desktop-codex-home", "C:/codex",
         "certify", "--thread", "thread-1",
     ])
-    assert (defaults.model, defaults.effort) == ("gpt-5.6-sol", "low")
+    assert (defaults.model, defaults.effort) == ("gpt-6-luna", "low")
     overrides = controller.parser().parse_args([
         "--hermes-home", "C:/hermes", "--desktop-codex-home", "C:/codex",
         "certify", "--thread", "thread-1", "--model", "custom-model", "--effort", "high",
@@ -53,10 +53,10 @@ def main() -> None:
     ), patch.object(controller, "_certify_build_e2e", side_effect=certify), patch.object(
         controller, "restore_thread_settings"
     ) as restore, patch.object(controller, '_atomic_json'):
-        result = controller.certify_build(ctx, "thread-1", 30, "gpt-5.6-sol", "low")
+        result = controller.certify_build(ctx, "thread-1", 30, "gpt-6-luna", "low")
     assert result['overall_ok'] is True
-    assert events == ["inspect", ("apply", "gpt-5.6-sol", "low"), ("certify", "gpt-5.6-sol", "low", "gpt-5.6-sol", "low")]
-    restore.assert_called_once_with(ctx, "thread-1", "gpt-5.6-sol", "low")
+    assert events == ["inspect", ("apply", "gpt-6-luna", "low"), ("certify", "gpt-6-luna", "low", "gpt-6-luna", "low")]
+    restore.assert_called_once_with(ctx, "thread-1", "gpt-6-luna", "low")
 
     with patch.object(controller, "certification_thread_info", return_value=dict(eligible)), patch.object(
         controller, "set_thread_settings"

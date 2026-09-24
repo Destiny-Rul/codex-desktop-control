@@ -1538,7 +1538,7 @@ def parser() -> argparse.ArgumentParser:
     wait = sub.add_parser("wait"); wait.add_argument("--job", required=True); wait.add_argument("--timeout", type=float, default=600)
     steer = sub.add_parser("steer"); steer.add_argument("--job", required=True); steer.add_argument("--prompt", required=True); steer.add_argument("--model"); steer.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max", "ultra"))
     interrupt = sub.add_parser("interrupt"); interrupt.add_argument("--job", required=True)
-    certify = sub.add_parser("certify"); certify.add_argument("--thread", required=True); certify.add_argument("--timeout", type=float, default=240); certify.add_argument("--model", default="gpt-5.6-sol"); certify.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max", "ultra"), default="low")
+    certify = sub.add_parser("certify"); certify.add_argument("--thread", required=True); certify.add_argument("--timeout", type=float, default=240); certify.add_argument("--model", default="gpt-6-luna"); certify.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max", "ultra"), default="low")
     queue = sub.add_parser("queue", help="Experimental native single-slot queue; live acceptance pending")
     queue_sub = queue.add_subparsers(dest="queue_command", required=True)
     enqueue = queue_sub.add_parser("enqueue"); enqueue.add_argument("--thread", required=True); enqueue.add_argument("--prompt", required=True)
