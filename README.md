@@ -98,7 +98,7 @@ changes and restores thread settings, steers one turn, and interrupts one turn.
 Use only a dedicated, idle, explicitly selected test thread:
 
 Unless explicitly overridden, certification first normalizes that dedicated
-thread to model `gpt-5.6-sol` with reasoning effort `low`. `--model` and
+thread to model `gpt-6-luna` with reasoning effort `low`. `--model` and
 `--effort` select different certification settings. The applied settings become
 the certification originals and remain on the test thread after success or
 failure cleanup; settings that existed before `certify` are not restored.

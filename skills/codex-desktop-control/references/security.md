@@ -10,16 +10,11 @@ not coordinate manual Desktop interactions. Cleanup interrupts only acknowledged
 turn IDs recorded by this certification, never an inferred uncertain submission.
 Receipts publish only after final settings restoration succeeds.
 
-Queue writes require ordinary current-version profile certification plus the
-exact accepted Desktop build/archive hash and queue method versions. Acceptance
-flags grant no bypass. The shared canonical thread lock covers exclusive-management
-provenance, slot checks, durable intent and one native setter; uncertain writes
-remain reserved and are never retried. First adoption requires independently
-verified empty visible queue and no manual/other-producer edits thereafter.
-Queue ledgers/history contain prompts in a private controller sidecar outside
-Codex home, shared across profiles. Never delete them to unblock a slot. Local
-status needs no certification or IPC and releases only after exact correlated
-terminal proof is archived. No cancel/reset or direct Codex state writes exist.
+Native queue is temporarily disabled at both the CLI and the internal enqueue
+boundary; no queue write is authorized. Historical safeguards and requalification
+requirements are recorded in `native-queue.md` and `queue-lifecycle.md`. Existing
+queue ledgers in the private controller sidecar contain prompts; never delete
+them to unblock anything.
 
 Full certification uses a bounded five-second sleep fixture for steer/interrupt.
 A missed active window fails; same-turn/exact-turn and settings readback checks
@@ -38,6 +33,6 @@ certification, and never authorize stale receipts.
 - Never retry an uncertain send. An explicit IPC `no-client-found` response is not uncertain: the addressed Desktop client has confirmed absent, so the controller may make one fresh-connection recovery. `status` may display candidate turn IDs; persist reconciliation only with an explicit exact candidate.
 - Store the certification receipt below the selected profile runtime. Bind it to the exact Skill, protocol contract, Desktop build, and database migration identity; never copy it between profiles or machines.
 - Run `certify` only with an explicitly supplied dedicated test thread. It must never enumerate, select, or switch to another thread.
-- Before certification, require that test thread to be unarchived and idle. Apply and verify the portable `gpt-5.6-sol`/`low` defaults or explicit user overrides before testing; those verified values become the certification originals. On failure, remove the receipt, attempt to interrupt only exact turns acknowledged as created by this certification, and restore the certification originals rather than the settings that preceded `certify`. Never interrupt unrelated active turns or uncertain submissions. A cleanup failure must never enable write capabilities.
+- Before certification, require that test thread to be unarchived and idle. Apply and verify the portable `gpt-6-luna`/`low` defaults or explicit user overrides before testing; those verified values become the certification originals. On failure, remove the receipt, attempt to interrupt only exact turns acknowledged as created by this certification, and restore the certification originals rather than the settings that preceded `certify`. Never interrupt unrelated active turns or uncertain submissions. A cleanup failure must never enable write capabilities.
 - Do not package or copy binaries, runtime data, databases, rollouts, jobs, browser data, config, auth, or audit records.
 - Bootstrap resets the private runtime DACL before granting only the current user, SYSTEM, and Administrators; it fails if any other principal remains. It writes only to the chosen profile Skill data and never changes PATH, registry, Hermes configuration, PowerShell profiles, Codex configuration, or credentials.

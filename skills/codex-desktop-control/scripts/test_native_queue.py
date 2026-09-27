@@ -26,7 +26,7 @@ def contender(root, ready, release):
         if not release.wait(15):
             raise RuntimeError('test timed out')
         raise RuntimeError('uncertain')
-    with patch.object(q, 'slot_root', return_value=Path(root)/'slots'), patch.object(q, 'queue_gate'), patch.object(q, 'capture_baseline', return_value={}), patch.object(c, 'thread_cwd', return_value=root), patch.object(c, 'run_ipc', side_effect=hold):
+    with patch.object(q, 'QUEUE_WRITE_ENABLED', True), patch.object(q, 'slot_root', return_value=Path(root)/'slots'), patch.object(q, 'queue_gate'), patch.object(q, 'capture_baseline', return_value={}), patch.object(c, 'thread_cwd', return_value=root), patch.object(c, 'run_ipc', side_effect=hold):
         q.enqueue(ctx, 'thread', 'test', adopt_empty_exclusive=True, acceptance_test=True)
 
 
@@ -35,7 +35,7 @@ class QueueTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.ctx = context(self.root)
-        self.patches = [patch.object(q, 'slot_root', return_value=self.root/'slots'),
+        self.patches = [patch.object(q, 'QUEUE_WRITE_ENABLED', True), patch.object(q, 'slot_root', return_value=self.root/'slots'),
                         patch.object(q, 'capture_baseline', return_value={}),
                         patch.object(q, 'queue_gate'),
                         patch.object(c, 'thread_cwd', return_value=str(self.root))]
@@ -156,10 +156,14 @@ class GateTests(unittest.TestCase):
                 c.run_ipc(ctx, {'operation': 'queue-enqueue'}, retry_owner_missing=False)
             self.assertEqual(call.call_count, 1)
 
-    def test_parser_adoption_and_acceptance_are_explicit(self):
-        args = c.parser().parse_args(['--hermes-home', 'unused', '--desktop-codex-home', 'unused', 'queue', 'enqueue', '--thread', 'thread', '--prompt', 'hello'])
-        self.assertFalse(args.adopt_empty_exclusive)
-        self.assertFalse(args.acceptance_test)
+    def test_queue_disabled_at_cli_and_internal_write_boundary(self):
+        self.assertNotIn('queue', c.parser()._subparsers._group_actions[0].choices)
+        with tempfile.TemporaryDirectory() as root, patch.object(q, 'QUEUE_WRITE_ENABLED', False), patch.object(c, 'run_ipc') as ipc:
+            with patch.object(q, 'queue_gate') as gate:
+                with self.assertRaisesRegex(RuntimeError, 'disabled'):
+                    q.enqueue(context(root), 'thread', 'hello', adopt_empty_exclusive=True)
+                gate.assert_not_called()
+                ipc.assert_not_called()
 
     def test_plain_native_input_has_text_elements(self):
         # Execute the pinned native converter, not a source-string assertion or
@@ -174,7 +178,7 @@ class GateTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout), {'input': {'type': 'text', 'text': 'hello 🌱', 'text_elements': []}, 'responseItems': []})
 
     def test_profile_receipt_authorizes_only_current_identity_without_flag_bypass(self):
-        with tempfile.TemporaryDirectory() as root:
+        with tempfile.TemporaryDirectory() as root, patch.object(q, 'QUEUE_WRITE_ENABLED', True):
             ctx = context(root)
             expected = {'skill_version': '0.3.15', 'desktop': q.ASAR_SHA256}
             desktop = {'ok': True, 'build': {'version': q.BUILD,

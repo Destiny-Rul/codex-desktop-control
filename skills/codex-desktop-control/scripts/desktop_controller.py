@@ -1539,14 +1539,6 @@ def parser() -> argparse.ArgumentParser:
     steer = sub.add_parser("steer"); steer.add_argument("--job", required=True); steer.add_argument("--prompt", required=True); steer.add_argument("--model"); steer.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max", "ultra"))
     interrupt = sub.add_parser("interrupt"); interrupt.add_argument("--job", required=True)
     certify = sub.add_parser("certify"); certify.add_argument("--thread", required=True); certify.add_argument("--timeout", type=float, default=240); certify.add_argument("--model", default="gpt-6-luna"); certify.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max", "ultra"), default="low")
-    queue = sub.add_parser("queue", help="Experimental native single-slot queue; live acceptance pending")
-    queue_sub = queue.add_subparsers(dest="queue_command", required=True)
-    enqueue = queue_sub.add_parser("enqueue"); enqueue.add_argument("--thread", required=True); enqueue.add_argument("--prompt", required=True)
-    enqueue.add_argument("--adopt-empty-exclusive", action="store_true", help="Attest the visible queue is empty and all queue edits are exclusively controller-managed")
-    enqueue.add_argument("--acceptance-test", action="store_true", help="Legacy acceptance label only; never bypasses certification, build or slot gates")
-    queue_status = queue_sub.add_parser("status"); queue_status.add_argument("--thread", required=True)
-    queue_status.add_argument("--observe", action="store_true", help="Bounded read-only owner broadcast observation; silence is unknown")
-    queue_status.add_argument("--baseline-evidence", help="Explicit one-time legacy reservation migration using a saved pre-submit baseline JSON")
     return result
 
 
@@ -1554,8 +1546,7 @@ def main() -> int:
     args = parser().parse_args()
     ctx = resolve_context(hermes_home=args.hermes_home, profile=args.profile, desktop_codex_home=args.desktop_codex_home)
     ensure_runtime_layout(ctx)
-    if args.command != "queue":
-        compatibility_gate(ctx, args.command)
+    compatibility_gate(ctx, args.command)
     if args.command == "probe":
         output = run_ipc(ctx, {"operation": "probe", "pipe": PIPE_PATH, "threadId": args.thread})
     elif args.command == "send":
@@ -1572,10 +1563,6 @@ def main() -> int:
         output = interrupt_job(ctx, args.job)
     elif args.command == "certify":
         output = certify_build(ctx, args.thread, args.timeout, args.model, args.effort)
-    elif args.command == "queue":
-        import native_queue
-        output = (native_queue.enqueue(ctx, args.thread, args.prompt, adopt_empty_exclusive=args.adopt_empty_exclusive, acceptance_test=args.acceptance_test)
-                  if args.queue_command == "enqueue" else native_queue.status(ctx, args.thread, observe=args.observe, baseline_evidence=args.baseline_evidence))
     else:
         return 2
     print(json.dumps(output, ensure_ascii=False))

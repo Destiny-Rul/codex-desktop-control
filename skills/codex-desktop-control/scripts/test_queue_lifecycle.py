@@ -36,7 +36,7 @@ class LifecycleTests(unittest.TestCase):
         self.rollout = self.ctx.desktop_home/'sessions'/'rollout.jsonl'
         self.rollout.parent.mkdir(parents=True)
         self.rollout.write_text(json.dumps({'type':'session_meta','payload':{'id':'thread','session_id':'thread'}})+'\n', encoding='utf-8')
-        self.patches = [patch.object(q,'slot_root',return_value=self.root/'slots'),
+        self.patches = [patch.object(q,'QUEUE_WRITE_ENABLED',True), patch.object(q,'slot_root',return_value=self.root/'slots'),
                         patch.object(q,'queue_gate'), patch.object(c,'find_rollout',return_value=self.rollout),
                         patch.object(c,'thread_cwd',return_value=str(self.root))]
         for p in self.patches: p.start()

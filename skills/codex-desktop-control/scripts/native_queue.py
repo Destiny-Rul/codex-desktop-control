@@ -11,6 +11,7 @@ from pathlib import Path
 import desktop_controller as c
 
 BUILD = '26.911.7940.0'
+QUEUE_WRITE_ENABLED = False  # Temporarily retired; never submit native follow-ups.
 ASAR_SHA256 = '74e7aaf2c112f84ef68a7846d10d1411403e72763f7e93fe046df2f264adf6e0'
 QUEUE_CONTRACT = {'required_anchors': ['thread-follower-set-queued-follow-ups-state', 'thread-queued-followups-changed'],
                   'method_versions': {'thread-follower-set-queued-follow-ups-state': 1, 'thread-queued-followups-changed': 2}}
@@ -266,6 +267,8 @@ def validate_released(ctx, thread, record):
 
 
 def enqueue(ctx, thread, prompt, *, adopt_empty_exclusive=False, acceptance_test=False):
+    if not QUEUE_WRITE_ENABLED:
+        raise RuntimeError('Native queue is disabled; no enqueue was attempted')
     home, thread = identity(ctx, thread)
     # Same canonical thread mutex as certification. No profile lock is taken:
     # certification orders receipt -> thread; queue takes only thread, so no cycle.

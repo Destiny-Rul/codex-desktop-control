@@ -1,7 +1,7 @@
 ---
 name: codex-desktop-control
 description: Safely control existing Codex Desktop tasks on Windows.
-version: 0.3.17
+version: 0.3.19
 author: Destiny-Rul
 license: MIT
 platforms:
@@ -20,32 +20,68 @@ Control an already-running Codex Desktop task through its structured Windows IPC
 
 ## Collaboration workflow
 
-- Hermes handles fast tasks directly. For necessary complex work, prefer Codex Desktop and minimize use of Hermes built-in subagents.
-- Codex Desktop may decide autonomously whether to use its own subagents while executing a task; Hermes does not need to authorize each Codex-internal subagent.
-- After obtaining the user's consent, Hermes may control one or multiple Codex Desktop threads that the user explicitly designates. Keep every operation scoped to those threads; never select a thread or expand the controlled set on the user's behalf.
-- Write Codex task prompts primarily in English. In each dispatched task prompt, request that Codex prefer FastCtx for file I/O; mention it once within that prompt rather than repeating it, not only in the first task of a multi-stage workflow. Leave model and reasoning settings under user control; do not set or change them unless the user explicitly requests it.
-- Prefer direct requests such as "Please inspect..." or "Please implement..." rather than framing instructions as "The user needs...".
-- Continually refine control prompts from Codex's replies and observed execution. Keep English-first, direct requests; adapt wording and detail to be precise and concise, rather than repeating a rigid template. Prefer one bounded, verifiable stage at a time. Finish each stage with real evidence, not a half-finished deliverable, and stop at its acceptance boundary without inventing extra work or expanding the authorized scope.
-- Split complex work into meaningful, verifiable stages. Provide the overall goal and necessary context, but dispatch only the current stage; review its results before giving the next stage. Do not fragment simple tasks unnecessarily.
-- Immediately after dispatch, start exactly one task-appropriate controller `wait` as a non-blocking background job. Hermes may continue working or communicating in parallel and may inspect progress or steer the active turn when needed, but must not call `process(wait)` to block on that waiter. At most one waiter may be active for a job at any moment.
-- Treat a wait timeout as reaching a review checkpoint, not as task failure: inspect current state, decide whether to keep waiting or steer, and communicate material progress.
-- When Codex completes, Hermes independently verifies the returned artifacts and accepts or rejects that stage. If accepted and the next dependent stage remains within the user's authorization, dispatch it without seeking routine reconfirmation; ask the user only for a material new decision or scope expansion. If rework is required, repeat the dispatch, single background wait, and independent acceptance cycle.
-- When Hermes does not understand the user's intent within this Skill's Codex-control scope, or a material ambiguity would affect a Codex control, monitoring, or acceptance decision, call the Hermes `clarify` tool and present selectable options instead of guessing or pretending to understand.
-- If owner discovery reports `no-client-found` because a user-designated thread is not open or visible in Codex Desktop, stop before any state-changing operation. Ask a concise selectable question offering to keep the designated thread after the user opens it or to use another thread only if the user explicitly designates that thread. After confirmation, run a fresh read-only `probe` before continuing. Never auto-select a replacement thread, write Codex state directly, use foreground GUI control, or loop retries around the missing owner.
+### Roles
+
+- Hermes plans stages, writes prompts, supervises execution, and makes the final acceptance decision. Codex executes. Treat every Codex report as a claim to verify, not as a result.
+- Handle fast tasks directly. For necessary complex work, prefer Codex Desktop and minimize Hermes built-in subagents. Codex may decide on its own subagents without per-subagent authorization.
+
+### Threads
+
+- With the user's consent, control only the one or more threads the user explicitly designates. Never select a thread or expand the controlled set.
+- Run a read-only `probe` first. If the thread has a live owner, dispatch through IPC in the background without UI interaction. Distinct designated threads may run concurrently.
+- If `probe` reports `no-client-found`, stop before any state-changing operation and ask the user to open that exact thread in Codex Desktop. Do not open or switch it, infer the cause, pick another thread, retry in a loop, or substitute CLI/SDK/app-server execution: an external writer blocks Desktop from resuming the thread while it runs. After the user confirms, run a fresh `probe`; if ownership is still missing, stop and report.
+
+### Dispatch contract
+
+- Split complex work into meaningful, verifiable stages. Dispatch only the current stage; review it before the next. Do not fragment simple tasks.
+- Every stage prompt must state, and must not be sent without:
+  - **Goal**: the outcome of this stage.
+  - **Context**: working directory, relevant files, and verified conclusions from earlier stages.
+  - **Scope**: what may change, and explicitly forbidden actions (for example commit, push, install, live operations).
+  - **Stop**: the boundary at which Codex must stop.
+  - **Report**: changed files, exact commands run with their real output, and unresolved risks.
+- Write prompts primarily in English as direct requests ("Please inspect...", "Please implement..."), not "The user needs...". Request FastCtx for file I/O once within each dispatched prompt. Leave model and reasoning settings unchanged unless the user explicitly asks.
+
+### Adapt prompts to observed behavior
+
+Rewrite the next prompt from what Codex actually did; do not resend a rigid template. Keep prompts precise and concise.
+
+| Observed | Next prompt |
+| --- | --- |
+| No-op (empty reply or no changes) | Name the required concrete file or output and narrow the scope. |
+| Scope overreach | Explicitly forbid the specific action that crossed the boundary. |
+| Direction drift | Steer quoting the drifting statement, state the correction, restate Stop. |
+| Vague report or unverifiable test claims | Require the exact commands and raw output. |
+| Two unstable rounds in a row | Split into a smaller stage; never resend the same prompt. |
+
+### Skeptical acceptance
+
+- Verify evidence first: `git diff`, actual file contents, and key tests rerun by Hermes.
+- Check each Codex claim; a claim without evidence counts as not done. Check for changes outside the stage scope.
+- Record exactly one verdict per stage: **accepted**, **rework**, **no-op**, or **overreach**. For the last three, state the concrete findings and redispatch using the adaptation table.
+- If accepted and the next dependent stage stays within the user's authorization, dispatch it without routine reconfirmation. Ask the user only for a material new decision or scope expansion.
+
+### Execution control
+
+- After each acknowledged dispatch, start exactly one non-blocking background waiter (see Safety contract). Set its timeout from the stage's expected duration. Continue working in parallel; never block on it with `process(wait)`.
+- A timeout is a review checkpoint, not failure: inspect `status`, then choose one of continue waiting, steer, or interrupt.
+- Steer only to correct direction or add a missing constraint, never to append new work.
+- Interrupt only for clear overreach, a dangerous action, or confirmed wasted execution.
+- When the user's intent within this Skill's Codex-control scope is unclear, or an ambiguity would materially affect a control, monitoring, or acceptance decision, call the Hermes `clarify` tool with selectable options instead of guessing.
 
 ## Safety contract
 
 - Require Windows x86-64, an absolute `--hermes-home`, a simple `--profile`, and an explicit absolute `--desktop-codex-home` (the Codex user-state directory containing `state_5.sqlite`, normally `%USERPROFILE%\\.codex`) on every invocation.
 - Run `scripts/doctor.py --offline` after bootstrap and before controller use. Run online doctor checks before the first live operation after a Desktop upgrade.
 - Treat `send`, `steer`, and `interrupt` as state-changing operations. Never retry an uncertain send automatically. The controller may make exactly one fresh-connection recovery only after an explicit IPC `no-client-found` rejection: that response proves the addressed Desktop client no longer existed and therefore could not have created a turn.
-- After every confirmed `send` for a nontrivial execution task, immediately start exactly one tracked background waiter: run `desktop_controller.py ... wait --job JOB --timeout SECONDS` through `terminal(background=True, notify_on_complete=True)`. The controller takes only explicit absolute arguments and does not need a shell working directory: omit the `terminal` `workdir` field for this waiter. This prevents malformed or copy/paste-contaminated workdir values (including `\r`) from blocking its launch. A waiter timeout means the review checkpoint has been reached, not that the task failed: after the waiter exits, inspect the job once with `status` and check for missing startup, approval waits, direction drift, or a need to steer. If that same job is still legitimately `running`, immediately start one replacement waiter with a task-appropriate timeout. Never re-send the task, never allow two waiters to coexist, and never use `process(wait)` to block the conversation. When the job reaches terminal state, independently verify any reported local/remote artifacts and synchronize newly created non-rebuildable material before dispatching another task.
-- A controller `wait` observes the Codex Desktop turn only. If that turn launches a remote or detached child process, require its PID, progress path and completion markers in the returned task receipt. For an expected runtime above five minutes, instruct Codex to establish a single read-only remote monitor with a first snapshot by five minutes and snapshots every ten minutes thereafter (PID, progress, rate, CPU/GPU, disk, errors, terminal marker). The primary agent must also start an independent read-only verifier plus a five-minute delivery alarm; a completed/timed-out Codex turn is never proof that its remote child completed or failed, and Codex monitoring never replaces the primary agent's user-facing progress report.
+- Waiter mechanics: after every acknowledged `send`, run `desktop_controller.py ... wait --job JOB --timeout SECONDS` through `terminal(background=True, notify_on_complete=True)`. Omit the `terminal` `workdir` field; the controller takes only explicit absolute arguments, and a contaminated workdir (including `\r`) would block launch. After the waiter exits, inspect the job once with `status`. If the same job is still `running`, start exactly one replacement waiter. Never re-send the task, never let two waiters coexist, and never block with `process(wait)`.
+- A controller `wait` observes the Codex Desktop turn only. A completed turn is not proof that any detached or remote child process it launched has finished.
 - After a Desktop build or database migration changes, permit only structural checks and existing-job reads until `certify` succeeds on an explicitly designated test thread.
 - Treat `certify` as a state-changing maintenance operation. It sends test turns, changes and restores model settings, steers one turn, and interrupts one turn on that exact test thread. Never choose a thread automatically.
-- Certification defaults portably to model `gpt-6-luna` and reasoning effort `low`; an explicit user choice may override either with `certify --model MODEL --effort EFFORT`. Only the test-thread ID is installation/profile-local and must always be user-designated. Confirm that thread exists, is unarchived, and is idle before applying certification settings. If it is missing or not open, ask a selectable user question and never select a replacement automatically.
-- **Upgrade recovery:** run `doctor.py --offline`, then the online doctor after a Desktop build/schema or migration warning. If it reports `structurally-compatible` with stale certification, use the already user-designated working/test thread only when the user explicitly authorizes automatic continuation or names that thread; run `certify --thread ID`, then rerun online doctor and `probe` before the next `send`. Do not bypass certification, retry a blocked send, or substitute foreground UI control.
-- Keep generated jobs and temporary files below the selected profile's Skill data directory. Queue ledgers and immutable terminal history instead use the shared controller sidecar outside Codex home, so profiles cannot reserve the same thread independently.
-- Queue enqueue requires ordinary valid profile certification plus the exact tested Desktop build/hash and queue protocol in `references/native-queue.md`. Adoption requires independently verified empty visible queue and exclusive controller management: no manual queue edits or other producers. One pending/unknown slot per canonical home/thread; never retry uncertain enqueue or delete its ledger. There is no cancel/reset support.
+- Certification defaults portably to model `gpt-6-luna` and reasoning effort `low`; an explicit user choice may override either with `certify --model MODEL --effort EFFORT`. Only the test-thread ID is installation/profile-local and must always be user-designated. Confirm that thread exists, is unarchived, idle, and owned before applying certification settings. If any prerequisite is missing, stop and request a user decision; never select a replacement automatically.
+- **Upgrade recovery:** run `doctor.py --offline`, then the online doctor after a Desktop build/schema or migration warning. If it reports `structurally-compatible` with stale certification, run `certify --thread ID` only on the user-designated test thread, never on a working thread, and only after the user authorizes it or has standing authorization for recertification; then rerun online doctor and `probe` before the next `send`. Do not bypass certification, retry a blocked send, or substitute another control surface.
+- Keep generated jobs and temporary files below the selected profile's Skill data directory.
+- A completed waiter/turn releases the active job, not necessarily the Desktop's loaded thread or its memory. Do not claim per-thread resource reclamation from a completed turn or elapsed time. Inactive-thread unsubscribe is conditional (three-hour TTL or pressure above the retained-owner cap, subject to keep-loaded conditions); read-only owner probes do not measure per-thread memory. Do not invoke undocumented unsubscribe/stop or kill a process as routine cleanup.
 - Do not fall back to global `PATH`, `~/.codex`, Hermes configuration, PowerShell profiles, or ambient credentials.
 
 ## Commands
@@ -60,14 +96,12 @@ python $Controller @Common probe --thread <thread-id>
 
 Use these subcommands:
 
-- `probe --thread ID`: verify that the visible Desktop owns the thread.
+- `probe --thread ID`: verify that Desktop owns the exact designated thread.
 - `send --thread ID --prompt TEXT [--model MODEL --effort EFFORT]`: update explicit thread settings first, then start a turn and return a job.
 - `status --job JOB [--reconcile-turn TURN]`: read rollout state. For uncertain submissions, report candidates and require an exact turn ID before persisting reconciliation.
 - `wait --job JOB --timeout SECONDS`: perform bounded Windows rollout monitoring until terminal state.
 - `steer --job JOB --prompt TEXT [--model MODEL --effort EFFORT]`: steer the exact active turn.
 - `interrupt --job JOB`: interrupt the exact active turn.
-- `queue enqueue --thread ID --prompt TEXT [--adopt-empty-exclusive]`: submit one native follow-up without steering the current turn. Busy work finishes before native follow-up execution; idle execution is allowed. First use requires explicit empty/exclusive adoption; proven release permits reuse without re-adoption.
-- `queue status --thread ID [--observe]`: reconcile exact persisted native client ID to running/terminal turn evidence and archive terminal proof before releasing the slot. Default status is local and available without certification; `--observe` adds gated read-only IPC. Queue IDs are not job IDs: use bounded background status monitoring, not `wait --job` with a queue ID. Missing/ambiguous evidence remains unknown/reserved.
 - `certify --thread ID [--model MODEL] [--effort EFFORT] [--timeout SECONDS]`: apply the portable `gpt-6-luna`/`low` defaults unless explicitly overridden, then run the complete compatibility test on the user-designated thread and write a build-bound local receipt only after every check passes.
 
 ## References
@@ -75,7 +109,6 @@ Use these subcommands:
 - Read `references/compatibility.md` when Desktop, Node, or the state schema changes.
 - Read `references/protocol.md` when debugging IPC or rollout events.
 - Read `references/security.md` before changing paths, subprocess environments, job reconciliation, or dependency bootstrap behavior.
-- Read `references/native-queue.md` and `references/queue-lifecycle.md` before queue adoption, enqueue, monitoring or acceptance. The legacy `--acceptance-test` label bypasses no gate.
 - Treat `references/dependencies.lock.json` as the only dependency source of truth.
 
 Protocol incompatibility, missing required database structure, stale certification, ambiguous uncertain jobs, and failed setting restoration must fail closed.
