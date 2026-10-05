@@ -44,13 +44,13 @@ certification receipt is stored in this repository or its release ZIP.
 Inspect the community skill before installing it:
 
 ```powershell
-hermes skills inspect Destiny-Rul/CodexAgentControl/skills/codex-desktop-control
+hermes skills inspect Destiny-Rul/codex-desktop-control/skills/codex-desktop-control
 ```
 
 Install it into the active Hermes profile:
 
 ```powershell
-hermes skills install Destiny-Rul/CodexAgentControl/skills/codex-desktop-control
+hermes skills install Destiny-Rul/codex-desktop-control/skills/codex-desktop-control
 ```
 
 Installed skills are security-scanned by Hermes. Start a new session after
