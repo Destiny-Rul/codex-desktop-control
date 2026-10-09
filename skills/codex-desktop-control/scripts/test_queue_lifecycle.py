@@ -244,7 +244,7 @@ class SplitSqliteLayoutTests(unittest.TestCase):
         ctx = self.context(self.home, self.sqlite_home)
         self.assertEqual(c._database(ctx), self.sqlite_home.resolve()/'state_5.sqlite')
         self.assertEqual(c.find_rollout(ctx, 'thread'), self.rollout.resolve())
-        self.assertEqual(c.thread_cwd(ctx, 'thread'), str(self.root))
+        self.assertEqual(Path(c.thread_cwd(ctx, 'thread')).resolve(), self.root.resolve())
         path, data = q.rollout_data(ctx, 'thread')
         self.assertEqual(path, self.rollout.resolve())
         self.assertTrue(data.startswith(b'{"type": "session_meta"'))
