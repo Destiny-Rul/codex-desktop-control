@@ -1,6 +1,6 @@
 # Reusable single-slot lifecycle
 
-> **Disabled.** Native queue is temporarily disabled in v0.3.19. The `queue` CLI commands described below do not exist, and the internal enqueue boundary rejects every write. This file is historical design evidence only; do not use it as an operating instruction.
+> **Disabled.** Native queue is temporarily disabled in v0.3.20. The `queue` CLI commands described below do not exist, and the internal enqueue boundary rejects every write. This file is historical design evidence only; do not use it as an operating instruction.
 
 Two-cycle repeated use was independently accepted on Desktop 26.908.9136.0.
 v0.3.15 enables enqueue only with current profile certification and the exact

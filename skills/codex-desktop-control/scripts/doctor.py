@@ -14,6 +14,7 @@ def main() -> int:
     parser.add_argument("--hermes-home", required=True)
     parser.add_argument("--profile", default="default")
     parser.add_argument("--desktop-codex-home", required=True)
+    parser.add_argument("--desktop-sqlite-home", help="Directory containing state_5.sqlite when Codex sqlite_home/CODEX_SQLITE_HOME differs from --desktop-codex-home")
     parser.add_argument("--thread", help="Optional visible thread for an online read-only owner probe")
     args = parser.parse_args()
 
@@ -21,6 +22,7 @@ def main() -> int:
         hermes_home=args.hermes_home,
         profile=args.profile,
         desktop_codex_home=args.desktop_codex_home,
+        desktop_sqlite_home=args.desktop_sqlite_home,
         offline=args.offline,
         thread_id=args.thread,
     )

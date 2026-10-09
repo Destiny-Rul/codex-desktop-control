@@ -19,7 +19,8 @@ QUEUE_CONTRACT = {'required_anchors': ['thread-follower-set-queued-follow-ups-st
 
 def identity(ctx, thread):
     thread = c._safe_id(thread, 'thread id').lower()
-    return os.path.normcase(str(ctx.desktop_home.resolve())), thread
+    # Threads are scoped to the state database; in the default layout this is the Codex home.
+    return c.installation_key(ctx), thread
 
 
 def slot_root(ctx):

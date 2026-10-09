@@ -1,6 +1,6 @@
 # Native single-slot queue
 
-> **Disabled.** Native queue is temporarily disabled in v0.3.19. The `queue` CLI commands described below do not exist, and the internal enqueue boundary rejects every write. This file is historical design evidence only; do not use it as an operating instruction.
+> **Disabled.** Native queue is temporarily disabled in v0.3.20. The `queue` CLI commands described below do not exist, and the internal enqueue boundary rejects every write. This file is historical design evidence only; do not use it as an operating instruction.
 
 Repeated-use enqueue/status was independently accepted on the prior exact pin.
 The current exact pin has independently verified native structure but awaits the

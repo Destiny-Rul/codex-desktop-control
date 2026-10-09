@@ -10,7 +10,7 @@ import desktop_controller as c
 
 
 def holder(runtime, home, thread, phase, ready, release):
-    ctx = SimpleNamespace(runtime=Path(runtime), desktop_home=Path(home))
+    ctx = SimpleNamespace(runtime=Path(runtime), desktop_home=Path(home), desktop_sqlite_home=Path(home))
     def pause(*args, **kwargs):
         ready.set()
         if not release.wait(15):
@@ -37,13 +37,13 @@ class ConcurrencyTests(unittest.TestCase):
                     for profile, target, codex in ((runtime, 'other', home), (str(Path(root)/'other-profile'), 'thread', str(Path(home)/'..'/'home'))):
                         with patch.object(c, 'certification_thread_info') as eligibility, patch.object(c, 'set_thread_settings') as settings, patch.object(Path, 'unlink') as deletion:
                             with self.assertRaisesRegex(RuntimeError, 'already running'):
-                                c.certify_build(SimpleNamespace(runtime=Path(profile), desktop_home=Path(codex)), target, 10, 'model', 'low')
+                                c.certify_build(SimpleNamespace(runtime=Path(profile), desktop_home=Path(codex), desktop_sqlite_home=Path(codex)), target, 10, 'model', 'low')
                             eligibility.assert_not_called()
                             settings.assert_not_called()
                             deletion.assert_not_called()
                     proc.terminate()
                     proc.join(10)
-                    with c.certification_locks(SimpleNamespace(runtime=Path(runtime), desktop_home=Path(home)), 'thread'):
+                    with c.certification_locks(SimpleNamespace(runtime=Path(runtime), desktop_home=Path(home), desktop_sqlite_home=Path(home)), 'thread'):
                         pass
                 finally:
                     if proc.is_alive():

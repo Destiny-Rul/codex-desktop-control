@@ -1,7 +1,7 @@
 ---
 name: codex-desktop-control
 description: Safely control existing Codex Desktop tasks on Windows.
-version: 0.3.19
+version: 0.3.20
 author: Destiny-Rul
 license: MIT
 platforms:
@@ -72,6 +72,7 @@ Rewrite the next prompt from what Codex actually did; do not resend a rigid temp
 ## Safety contract
 
 - Require Windows x86-64, an absolute `--hermes-home`, a simple `--profile`, and an explicit absolute `--desktop-codex-home` (the Codex user-state directory containing `state_5.sqlite`, normally `%USERPROFILE%\\.codex`) on every invocation.
+- If Codex keeps `state_5.sqlite` outside that directory (Codex `sqlite_home` / `CODEX_SQLITE_HOME`, for example `<codex-home>\sqlite`), also pass the absolute `--desktop-sqlite-home`. Rollouts are still accepted only below `<codex-home>\sessions` and `<codex-home>\archived_sessions`. Never guess or auto-detect either directory; use the same pair for doctor, controller, and certification.
 - Run `scripts/doctor.py --offline` after bootstrap and before controller use. Run online doctor checks before the first live operation after a Desktop upgrade.
 - Treat `send`, `steer`, and `interrupt` as state-changing operations. Never retry an uncertain send automatically. The controller may make exactly one fresh-connection recovery only after an explicit IPC `no-client-found` rejection: that response proves the addressed Desktop client no longer existed and therefore could not have created a turn.
 - Waiter mechanics: after every acknowledged `send`, run `desktop_controller.py ... wait --job JOB --timeout SECONDS` through `terminal(background=True, notify_on_complete=True)`. Omit the `terminal` `workdir` field; the controller takes only explicit absolute arguments, and a contaminated workdir (including `\r`) would block launch. After the waiter exits, inspect the job once with `status`. If the same job is still `running`, start exactly one replacement waiter. Never re-send the task, never let two waiters coexist, and never block with `process(wait)`.
@@ -91,6 +92,8 @@ Set the common arguments explicitly:
 ```powershell
 $Controller = '<skill>\scripts\desktop_controller.py'
 $Common = @('--hermes-home', '<absolute-hermes-home>', '--profile', 'default', '--desktop-codex-home', '<absolute-codex-home>')
+# Only when state_5.sqlite lives elsewhere:
+# $Common += @('--desktop-sqlite-home', '<absolute-sqlite-home>')
 python $Controller @Common probe --thread <thread-id>
 ```
 

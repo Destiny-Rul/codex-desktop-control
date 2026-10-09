@@ -1,6 +1,8 @@
 """Baseline-scoped persisted queue lifecycle; no Desktop IPC is used."""
 import json
 import multiprocessing as mp
+import os
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,7 +19,7 @@ def event(kind, **fields):
 
 def archive_holder(root, ready, release):
     root=Path(root)
-    ctx=SimpleNamespace(desktop_home=root/'codex', runtime=root/'profile')
+    ctx=SimpleNamespace(desktop_home=root/'codex', desktop_sqlite_home=root/'codex', runtime=root/'profile')
     original=q.archive_terminal
     def pause(*args):
         path=original(*args)
@@ -32,7 +34,7 @@ class LifecycleTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        self.ctx = SimpleNamespace(desktop_home=self.root/'codex', runtime=self.root/'profile')
+        self.ctx = SimpleNamespace(desktop_home=self.root/'codex', desktop_sqlite_home=self.root/'codex', runtime=self.root/'profile')
         self.rollout = self.ctx.desktop_home/'sessions'/'rollout.jsonl'
         self.rollout.parent.mkdir(parents=True)
         self.rollout.write_text(json.dumps({'type':'session_meta','payload':{'id':'thread','session_id':'thread'}})+'\n', encoding='utf-8')
@@ -177,7 +179,7 @@ class LifecycleTests(unittest.TestCase):
         process=spawn.Process(target=archive_holder,args=(str(self.root),ready,release)); process.start()
         try:
             self.assertTrue(ready.wait(10))
-            other=SimpleNamespace(desktop_home=self.root/'codex'/'..'/'codex',runtime=self.root/'other-profile')
+            other=SimpleNamespace(desktop_home=self.root/'codex'/'..'/'codex',desktop_sqlite_home=self.root/'codex'/'..'/'codex',runtime=self.root/'other-profile')
             with patch.object(c,'run_ipc') as ipc:
                 with self.assertRaisesRegex(RuntimeError,'already running'):
                     q.enqueue(other,'thread','competing',acceptance_test=True)
@@ -207,6 +209,90 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(next_record['slot_reserved'])
         self.assertEqual(next_record['build'],q.BUILD)
         self.assertEqual(next_record['previous_terminal_receipt'],status['terminal_receipt'])
+
+
+class SplitSqliteLayoutTests(unittest.TestCase):
+    """Codex sqlite_home/CODEX_SQLITE_HOME: state_5.sqlite in <home>/sqlite, rollouts in <home>/sessions."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.home = self.root/'codex-home'
+        self.sqlite_home = self.home/'sqlite'
+        self.rollout = self.home/'sessions'/'2026'/'10'/'09'/'rollout-thread.jsonl'
+        self.rollout.parent.mkdir(parents=True)
+        self.sqlite_home.mkdir()
+        self.rollout.write_text(json.dumps({'type':'session_meta','payload':{'id':'thread','session_id':'thread'}})+'\n', encoding='utf-8')
+        self.map_thread(self.rollout)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def map_thread(self, rollout_path):
+        connection = sqlite3.connect(self.sqlite_home/'state_5.sqlite')
+        try:
+            connection.execute('CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, rollout_path TEXT, cwd TEXT)')
+            connection.execute('INSERT OR REPLACE INTO threads VALUES (?,?,?)', ('thread', str(rollout_path), str(self.root)))
+            connection.commit()
+        finally:
+            connection.close()
+
+    def context(self, home, sqlite_home=None):
+        return c.resolve_context(hermes_home=self.root/'hermes', profile='p', desktop_codex_home=home, desktop_sqlite_home=sqlite_home)
+
+    def test_database_from_sqlite_home_and_rollout_from_codex_sessions(self):
+        ctx = self.context(self.home, self.sqlite_home)
+        self.assertEqual(c._database(ctx), self.sqlite_home.resolve()/'state_5.sqlite')
+        self.assertEqual(c.find_rollout(ctx, 'thread'), self.rollout.resolve())
+        self.assertEqual(c.thread_cwd(ctx, 'thread'), str(self.root))
+        path, data = q.rollout_data(ctx, 'thread')
+        self.assertEqual(path, self.rollout.resolve())
+        self.assertTrue(data.startswith(b'{"type": "session_meta"'))
+
+    def test_default_layout_is_unchanged_and_doctor_names_the_flag(self):
+        ctx = self.context(self.home)
+        self.assertEqual(ctx.desktop_sqlite_home, ctx.desktop_home)
+        self.assertEqual(c._database(ctx), self.home.resolve()/'state_5.sqlite')
+        report = c.schema_report(ctx)
+        self.assertEqual(report['issues'], ['state database missing'])
+        self.assertIn('--desktop-sqlite-home', report['hint'])
+        self.assertIn(str(self.sqlite_home.resolve()), report['hint'])
+
+    def test_pointing_codex_home_at_sqlite_dir_still_fails_closed(self):
+        ctx = self.context(self.sqlite_home)
+        with self.assertRaisesRegex(RuntimeError, 'escaped Desktop session roots'):
+            c.find_rollout(ctx, 'thread')
+
+    def test_session_root_and_unc_guards_are_unchanged(self):
+        ctx = self.context(self.home, self.sqlite_home)
+        stray = self.sqlite_home/'sessions'/'rollout-thread.jsonl'
+        stray.parent.mkdir()
+        stray.write_text(self.rollout.read_text(encoding='utf-8'), encoding='utf-8')
+        self.map_thread(stray)
+        with self.assertRaisesRegex(RuntimeError, 'escaped Desktop session roots'):
+            c.find_rollout(ctx, 'thread')
+        self.map_thread('\\\\server\\share\\sessions\\rollout-thread.jsonl')
+        with self.assertRaisesRegex(RuntimeError, 'UNC'):
+            c.find_rollout(ctx, 'thread')
+
+    def test_lock_key_and_receipt_bind_both_directories(self):
+        ctx = self.context(self.home, self.sqlite_home)
+        respelled = self.context(self.home/'sessions'/'..', self.home/'sqlite'/'..'/'sqlite')
+        self.assertEqual(c.installation_key(ctx), os.path.normcase(str(self.sqlite_home.resolve())))
+        self.assertEqual(c.installation_key(respelled), c.installation_key(ctx))
+        self.assertEqual(c.desktop_layout(ctx), {'codex_home': os.path.normcase(str(self.home.resolve())),
+                                                 'sqlite_home': os.path.normcase(str(self.sqlite_home.resolve()))})
+        identity = {'desktop_version': 'test'}
+        checks = {name: {'ok': True} for name in ('probe', 'send_wait_status', 'settings_round_trip', 'steer', 'interrupt', 'final_probe')}
+        receipt = {'format_version': 1, 'identity': identity, 'desktop_layout': c.desktop_layout(ctx), 'checks': checks,
+                   'overall_ok': True, 'certification_thread_id': 'thread'}
+        c.certification_path(ctx).parent.mkdir(parents=True)
+        c.certification_path(ctx).write_text(json.dumps(receipt), encoding='utf-8')
+        self.assertTrue(c.certification_report(ctx, identity)['certified'])
+        self.assertTrue(c.certification_report(respelled, identity)['certified'])
+        mismatched = c.certification_report(self.context(self.home), identity)
+        self.assertFalse(mismatched['certified'])
+        self.assertIn('certification receipt was issued for a different Codex home or SQLite home', mismatched['issues'])
 
 
 if __name__=='__main__': unittest.main(verbosity=2)

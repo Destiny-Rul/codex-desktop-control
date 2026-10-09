@@ -2,8 +2,10 @@
 
 ## Current
 
-- Skill version: `0.3.19`
-- Live certification: **passed** on Desktop `26.924.2738.0` (research profile), 59.531 s, with `gpt-6-luna` / `low`. Send/wait/status, settings round-trip, same-turn steer, exact interrupt and final probe all passed; online doctor reports `certified`, writes enabled, no issues. The certification-window Desktop logs (5019 lines, 105 test-thread lines) contained no React error-boundary, undefined-property, TypeError, EPIPE or crash marker; 209 ResizeObserver warnings are reported separately.
+- Skill version: `0.3.20`
+- v0.3.20 live certification: **passed** at `2026-10-09T12:19:20Z` on Desktop `26.1002.7124.0` (research profile) in a split layout (`--desktop-codex-home <codex-home>`, `--desktop-sqlite-home <codex-home>\sqlite`), 17.2 s, with `gpt-6-luna` / `low`. Send/wait/status, settings round-trip, same-turn steer, exact interrupt and final probe passed; online doctor reports `certified`, writes enabled, no issues. Certification-window Desktop logs (158 lines, 28 test-thread lines) had no error-boundary, undefined-property, TypeError, EPIPE or crash marker. The Skill version change and the receipt `desktop_layout` field invalidate earlier receipts; other profiles need bootstrap and certification.
+- v0.3.20 adds optional `--desktop-sqlite-home` for Codex `sqlite_home` layouts (`state_5.sqlite` in `<codex-home>\sqlite`). Offline regressions cover database/rollout root separation, unchanged session-root and UNC guards, lock keys, receipt layout binding, and queue slot identity.
+- v0.3.19 live certification (historical): **passed** on Desktop `26.924.2738.0` (research profile), 59.531 s, with `gpt-6-luna` / `low`. Send/wait/status, settings round-trip, same-turn steer, exact interrupt and final probe all passed; online doctor reports `certified`, writes enabled, no issues. The certification-window Desktop logs (5019 lines, 105 test-thread lines) contained no React error-boundary, undefined-property, TypeError, EPIPE or crash marker; 209 ResizeObserver warnings are reported separately.
 - Portable certification default: `gpt-6-luna` / `low`
 - Native queue: **disabled** in the CLI and the internal enqueue boundary. Historical code, ledgers and receipts are retained for later review.
 - Certification receipts are profile-local runtime data. Never copy them between profiles or publish them. Certification uses only a user-designated test thread.

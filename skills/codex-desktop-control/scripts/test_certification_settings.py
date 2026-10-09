@@ -33,7 +33,7 @@ def main() -> None:
     ])
     assert (overrides.model, overrides.effort) == ("custom-model", "high")
 
-    ctx = SimpleNamespace(runtime=Path.cwd() / ".certification-test-runtime", desktop_home=Path.cwd())
+    ctx = SimpleNamespace(runtime=Path.cwd() / ".certification-test-runtime", desktop_home=Path.cwd(), desktop_sqlite_home=Path.cwd())
     eligible = {"title": "test", "archived": False, "model": "old", "effort": "medium"}
     events: list[object] = []
 

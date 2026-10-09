@@ -1,6 +1,7 @@
 """Offline single-slot regressions; native transport is a loopback fake, never Desktop."""
 import json
 import multiprocessing as mp
+import os
 import shutil
 import socket
 import subprocess
@@ -16,7 +17,7 @@ import native_queue as q
 
 
 def context(root, profile='a'):
-    return SimpleNamespace(desktop_home=Path(root)/'desktop', runtime=Path(root)/profile)
+    return SimpleNamespace(desktop_home=Path(root)/'desktop', desktop_sqlite_home=Path(root)/'desktop', runtime=Path(root)/profile)
 
 
 def contender(root, ready, release):
@@ -127,6 +128,7 @@ class QueueTests(unittest.TestCase):
             self.assertTrue(ready.wait(10))
             ctx = context(self.root, 'other-profile')
             ctx.desktop_home = self.root/'desktop'/'..'/'desktop'
+            ctx.desktop_sqlite_home = ctx.desktop_home
             with patch.object(c, 'run_ipc') as ipc:
                 with self.assertRaisesRegex(RuntimeError, 'already running'):
                     q.enqueue(ctx, 'thread', 'second', adopt_empty_exclusive=True, acceptance_test=True)
@@ -185,6 +187,7 @@ class GateTests(unittest.TestCase):
                        'desktop_protocol_payload_sha256': q.ASAR_SHA256},
                        'processes': [{'protocol_payload': 'unused'}]}
             receipt = {'format_version': 1, 'identity': expected, 'overall_ok': True,
+                       'desktop_layout': c.desktop_layout(ctx),
                        'certification_thread_id': 'designated-test',
                        'checks': {name: {'ok': True} for name in ('probe', 'send_wait_status',
                            'settings_round_trip', 'steer', 'interrupt', 'final_probe')}}
@@ -328,6 +331,50 @@ class BridgeTests(unittest.TestCase):
         result, frames = self.exchange(operation='queue-observe')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(any(f['method']=='thread-follower-set-queued-follow-ups-state' for f in frames))
+
+
+def split_context(root, profile='a', home_spelling=None, sqlite_spelling=None):
+    home = Path(root)/'codex-home'
+    return SimpleNamespace(desktop_home=home_spelling or home, desktop_sqlite_home=sqlite_spelling or home/'sqlite',
+                           runtime=Path(root)/profile)
+
+
+class SplitSqliteQueueTests(unittest.TestCase):
+    """Queue slot identity when state_5.sqlite lives in <codex-home>/sqlite."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        (self.root/'codex-home'/'sqlite').mkdir(parents=True)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_identity_keys_on_sqlite_home_and_slots_stay_outside_codex_home(self):
+        ctx = split_context(self.root)
+        self.assertEqual(q.identity(ctx, 'Thread'), (os.path.normcase(str((self.root/'codex-home'/'sqlite').resolve())), 'thread'))
+        self.assertEqual(q.slot_root(ctx), self.root.resolve()/'.codex-desktop-control-queues')
+        respelled = split_context(self.root, 'other', self.root/'codex-home'/'sqlite'/'..',
+                                  self.root/'codex-home'/'sessions'/'..'/'sqlite')
+        self.assertEqual(q.slot_path(respelled, 'thread'), q.slot_path(ctx, 'thread'))
+
+    def test_default_layout_keeps_previous_slot_key(self):
+        home = self.root/'codex-home'
+        ctx = SimpleNamespace(desktop_home=home, desktop_sqlite_home=home, runtime=self.root/'a')
+        self.assertEqual(q.identity(ctx, 'thread')[0], os.path.normcase(str(home.resolve())))
+
+    def test_second_profile_with_split_layout_sees_reserved_slot(self):
+        def ipc(ctx, payload, **kwargs):
+            return {'connected': True, 'ownerClientId': 'owner', 'result': {'ok': True},
+                    'queueObservation': {'kind': 'present', 'messages': [payload['item']]}}
+        with patch.object(q, 'QUEUE_WRITE_ENABLED', True), patch.object(q, 'slot_root', return_value=self.root/'slots'), \
+                patch.object(q, 'capture_baseline', return_value={}), patch.object(q, 'queue_gate'), \
+                patch.object(c, 'thread_cwd', return_value=str(self.root)), patch.object(c, 'run_ipc', side_effect=ipc) as call:
+            self.assertEqual(q.enqueue(split_context(self.root), 'thread', 'hello', adopt_empty_exclusive=True)['state'], 'enqueued')
+            other = split_context(self.root, 'other', sqlite_spelling=self.root/'codex-home'/'sessions'/'..'/'sqlite')
+            with self.assertRaisesRegex(RuntimeError, 'reserved'):
+                q.enqueue(other, 'thread', 'second', adopt_empty_exclusive=True, acceptance_test=True)
+            self.assertEqual(call.call_count, 1)
 
 
 if __name__ == '__main__':

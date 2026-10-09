@@ -38,6 +38,7 @@ class Context:
     profile: str
     runtime: Path
     desktop_home: Path
+    desktop_sqlite_home: Path
     jobs: Path
     tmp: Path
     tools: Path
@@ -75,9 +76,14 @@ def load_lock() -> dict[str, Any]:
     return data
 
 
-def resolve_context(*, hermes_home: str | Path, profile: str, desktop_codex_home: str | Path) -> Context:
+def resolve_context(*, hermes_home: str | Path, profile: str, desktop_codex_home: str | Path,
+                    desktop_sqlite_home: str | Path | None = None) -> Context:
     hermes = _absolute(hermes_home, "Hermes home")
     desktop = _absolute(desktop_codex_home, "Desktop Codex home")
+    # Codex keeps rollouts below CODEX_HOME but may place state_5.sqlite elsewhere
+    # (`sqlite_home` / CODEX_SQLITE_HOME). Both are explicit; the default is the
+    # historical single-directory layout.
+    sqlite_home = desktop if desktop_sqlite_home is None else _absolute(desktop_sqlite_home, "Desktop SQLite home")
     profile = _safe_profile(profile)
     profiles_root = (hermes / "skill-data" / "codex-desktop-control" / "profiles").resolve(strict=False)
     runtime = (profiles_root / profile).resolve(strict=False)
@@ -89,6 +95,7 @@ def resolve_context(*, hermes_home: str | Path, profile: str, desktop_codex_home
         profile=profile,
         runtime=runtime,
         desktop_home=desktop,
+        desktop_sqlite_home=sqlite_home,
         jobs=runtime / "jobs",
         tmp=runtime / "tmp",
         tools=tools,
@@ -167,10 +174,13 @@ def _migration_rows(connection: sqlite3.Connection) -> list[tuple[Any, ...]]:
 
 
 def schema_report(ctx: Context) -> dict[str, Any]:
-    database = ctx.desktop_home / str(ctx.lock["desktop_compatibility"]["state_database"])
+    database = _database(ctx)
     report: dict[str, Any] = {"database": str(database), "ok": False, "issues": [], "warnings": [], "drift": False}
     if not database.is_file():
         report["issues"].append("state database missing")
+        nested = ctx.desktop_home / "sqlite" / database.name
+        if nested != database and nested.is_file():
+            report["hint"] = f"found {nested}; pass --desktop-sqlite-home {nested.parent} (Codex sqlite_home / CODEX_SQLITE_HOME)"
         return report
     try:
         connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
@@ -292,6 +302,22 @@ def certification_path(ctx: Context) -> Path:
     return ctx.runtime / "certification" / "desktop-build.json"
 
 
+def installation_key(ctx: Context) -> str:
+    """Canonical identity of the Codex state store that owns thread records.
+
+    Thread IDs are scoped to state_5.sqlite, so cross-process locks key on its
+    directory. In the default layout this equals the Codex home (unchanged keys).
+    """
+    return os.path.normcase(str(ctx.desktop_sqlite_home.resolve()))
+
+
+def desktop_layout(ctx: Context) -> dict[str, str]:
+    return {
+        "codex_home": os.path.normcase(str(ctx.desktop_home.resolve())),
+        "sqlite_home": installation_key(ctx),
+    }
+
+
 def certification_report(ctx: Context, identity: dict[str, Any]) -> dict[str, Any]:
     path = certification_path(ctx)
     report: dict[str, Any] = {"certified": False, "path": str(path), "issues": []}
@@ -308,6 +334,8 @@ def certification_report(ctx: Context, identity: dict[str, Any]) -> dict[str, An
         return report
     if receipt.get("identity") != identity:
         report["issues"].append("certification receipt does not match the current Desktop build and schema")
+    if receipt.get("desktop_layout") != desktop_layout(ctx):
+        report["issues"].append("certification receipt was issued for a different Codex home or SQLite home")
     checks = receipt.get("checks") if isinstance(receipt.get("checks"), dict) else {}
     for name in ("probe", "send_wait_status", "settings_round_trip", "steer", "interrupt", "final_probe"):
         value = checks.get(name)
@@ -670,7 +698,7 @@ def _validate_rollout_path(home: Path, rollout_path: str | Path) -> Path:
 
 
 def _database(ctx: Context) -> Path:
-    return ctx.desktop_home / str(ctx.lock["desktop_compatibility"]["state_database"])
+    return ctx.desktop_sqlite_home / str(ctx.lock["desktop_compatibility"]["state_database"])
 
 
 def find_rollout(ctx: Context, thread_id: str) -> Path | None:
@@ -1259,9 +1287,9 @@ def _certification_lock(key: str):
 
 @contextmanager
 def certification_locks(ctx: Context, thread_id: str):
-    # Fixed order: profile receipt, then canonical Desktop home/thread.
+    # Fixed order: profile receipt, then canonical Desktop state store/thread.
     receipt = os.path.normcase(str(certification_path(ctx).resolve()))
-    home = os.path.normcase(str(ctx.desktop_home.resolve()))
+    home = installation_key(ctx)
     with ExitStack() as stack:
         stack.enter_context(_certification_lock('receipt:' + receipt))
         stack.enter_context(_certification_lock('thread:' + home + ':' + thread_id))
@@ -1452,6 +1480,7 @@ def _certify_build_e2e(
         "format_version": 1,
         "certified_at_utc": datetime.now(timezone.utc).isoformat(),
         "identity": identity,
+        "desktop_layout": desktop_layout(ctx),
         "certification_thread_id": thread_id,
         "thread": thread,
         "checks": {
@@ -1469,18 +1498,21 @@ def _certify_build_e2e(
     return receipt
 
 
-def doctor_report(*, hermes_home: str, profile: str, desktop_codex_home: str, offline: bool, thread_id: str | None = None) -> dict[str, Any]:
+def doctor_report(*, hermes_home: str, profile: str, desktop_codex_home: str, offline: bool, thread_id: str | None = None,
+                  desktop_sqlite_home: str | None = None) -> dict[str, Any]:
     checks: dict[str, Any] = {}
     issues: list[str] = []
     warnings: list[str] = []
     try:
-        ctx = resolve_context(hermes_home=hermes_home, profile=profile, desktop_codex_home=desktop_codex_home)
+        ctx = resolve_context(hermes_home=hermes_home, profile=profile, desktop_codex_home=desktop_codex_home,
+                              desktop_sqlite_home=desktop_sqlite_home)
     except Exception as exc:
         return {"ok": False, "offline": offline, "issues": [f"configuration: {type(exc).__name__}: {exc}"], "checks": {}}
     checks["platform"] = platform_report()
     if not checks["platform"]["ok"]:
         issues.append("unsupported platform")
-    checks["paths"] = {"ok": _is_within(ctx.runtime, ctx.hermes_home / "skill-data" / "codex-desktop-control" / "profiles"), "runtime": str(ctx.runtime), "desktop_codex_home": str(ctx.desktop_home)}
+    checks["paths"] = {"ok": _is_within(ctx.runtime, ctx.hermes_home / "skill-data" / "codex-desktop-control" / "profiles"), "runtime": str(ctx.runtime),
+                       "desktop_codex_home": str(ctx.desktop_home), "desktop_sqlite_home": str(ctx.desktop_sqlite_home)}
     if not checks["paths"]["ok"]:
         issues.append("runtime path escaped Hermes home")
     checks["dependencies"] = dependency_report(ctx)
@@ -1531,6 +1563,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--hermes-home", required=True)
     result.add_argument("--profile", default="default")
     result.add_argument("--desktop-codex-home", required=True)
+    result.add_argument("--desktop-sqlite-home", help="Directory containing state_5.sqlite when Codex sqlite_home/CODEX_SQLITE_HOME differs from --desktop-codex-home")
     sub = result.add_subparsers(dest="command", required=True)
     probe = sub.add_parser("probe"); probe.add_argument("--thread", required=True)
     send = sub.add_parser("send"); send.add_argument("--thread", required=True); send.add_argument("--prompt", required=True); send.add_argument("--model"); send.add_argument("--effort", choices=("low", "medium", "high", "xhigh", "max", "ultra"))
@@ -1544,7 +1577,8 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = parser().parse_args()
-    ctx = resolve_context(hermes_home=args.hermes_home, profile=args.profile, desktop_codex_home=args.desktop_codex_home)
+    ctx = resolve_context(hermes_home=args.hermes_home, profile=args.profile, desktop_codex_home=args.desktop_codex_home,
+                          desktop_sqlite_home=args.desktop_sqlite_home)
     ensure_runtime_layout(ctx)
     compatibility_gate(ctx, args.command)
     if args.command == "probe":

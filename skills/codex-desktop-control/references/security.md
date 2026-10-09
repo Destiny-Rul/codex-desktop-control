@@ -25,7 +25,8 @@ certification, and never authorize stale receipts.
 
 - Discover an owner through `thread-owner-discovery` before a live operation. A `no-client-found` response means no current owner and must fail closed; only an explicit `no-handler-for-request` from an older Desktop may use the settled follower-broadcast fallback.
 - Resolve Skill data only from an explicit absolute Hermes home and validated profile name. Keep it below `skill-data/codex-desktop-control/profiles/<profile>`.
-- Resolve Desktop state only from explicit `--desktop-codex-home`; never derive it from the user home.
+- Resolve Desktop state only from explicit `--desktop-codex-home` and, when Codex `sqlite_home` differs, explicit `--desktop-sqlite-home`; never derive either from the user home or auto-detect a database. The SQLite home locates only `state_5.sqlite`; rollout paths must still resolve below the Codex home's `sessions` or `archived_sessions`, and UNC rollout paths stay rejected.
+- Key certification and queue locks on the canonical SQLite home (threads are scoped to that database; in the default layout it equals the Codex home). Certification receipts record both canonical directories and are valid only for that exact pair.
 - Invoke Node only by its absolute private path validated against `dependencies.lock.json` and the bootstrap install manifest.
 - Construct subprocess environments from a small operating-system allowlist. Do not inherit API keys, proxy credentials, `PATH`, Python settings, Codex settings, or Hermes settings.
 - Store only prompt hashes in jobs.

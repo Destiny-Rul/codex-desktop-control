@@ -32,7 +32,10 @@ credentials, or treat an observer timeout as task failure.
 - Codex Desktop installed and running
 - Hermes Agent
 - A Codex state directory containing `state_5.sqlite` (normally
-  `%USERPROFILE%\.codex`)
+  `%USERPROFILE%\.codex`). If Codex stores the database elsewhere through
+  `sqlite_home` or `CODEX_SQLITE_HOME` (for example `<codex-home>\sqlite`),
+  pass that directory with `--desktop-sqlite-home` in addition to
+  `--desktop-codex-home` on every doctor and controller command.
 
 The bootstrap downloads a pinned Node.js runtime from `nodejs.org`, verifies the
 archive and executable SHA-256 values, and installs it inside the selected
